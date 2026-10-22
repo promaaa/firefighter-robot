@@ -1,0 +1,442 @@
+[
+  {
+    "id": "rock3c",
+    "name": "Radxa ROCK 3C (RK3566) computer",
+    "qty": 1,
+    "size_mm": [
+      87.3,
+      56.0,
+      22.0
+    ],
+    "mass_g": 45,
+    "mount": "4 holes 2.8 mm (M2.5). Pattern 58 x 49 mm. Hole centres 3.5 mm from the board edges. Same pattern as a Raspberry Pi 3 or 4.",
+    "electrical": "5 V only. Input is USB-C at 5 V (no USB PD), or 5 V on 40-pin header pins 2 and 4. Radxa asks for 5 V 3 A, or 5 V 4 A with an M.2 SSD. GPIO is 3.3 V (max 3.63 V). USB: 1 USB 3.0, 2 USB 2.0, 1 USB 2.0 OTG, 2.8 A total for the 4 ports. Other ports: Gigabit Ethernet, HDMI, 2-lane MIPI CSI (15-pin FPC), 2-lane MIPI DSI. Fan header: 5 V, 2-pin 1.25 mm, PWM. PWM pins: 7 (PWM14_M0), 16 (PWM8_M0), 18 (PWM9_M0), 19 (PWM15_IR_M1), 21 (PWM12_M1), 23 (PWM14_M1), 24 (PWM13_M1). Pins 7 and 23 are the same PWM14 channel. UARTs on pins 8/10 (UART2 debug), 3/5, 16/18, 32/33. I2C on pins 3/5 and 27/28.",
+    "source_url": "https://dl2.radxa.com/rock3/docs/hw/3c/radxa_rock3c_product_brief.pdf",
+    "confidence": "datasheet",
+    "notes": "Board outline 85.0 x 56.0 mm from the Radxa v1.4 DXF. The Ethernet and USB jacks stick out 2.3 mm past one short edge, so L is 87.3 mm. Height 22 mm is an estimate: about 16 mm USB stack, 1.6 mm board, about 4 mm of parts and M.2 socket under the board. A heatsink 10 mm or lower stays under the USB stack. A heatsink with a fan adds about 4 to 6 mm. Mass is an estimate (Raspberry Pi 3 class boards are 42 to 50 g). Power draw is an estimate: about 2 W idle and 5 to 6 W at full CPU load, plus USB loads. The v1.4 schematic (sheet 29) shows USB-C VBUS goes straight to the 5 V rail through a 5 V TVS diode. 12 V on USB-C will damage the board. Schematic: https://dl.radxa.com/rock3/docs/hw/3c/v1400/radxa_rock_3c_v1400_schematic.pdf. 2D DXF: https://dl.radxa.com/rock3/docs/hw/3c/v1400/radxa_rock_3c_v1400_2d_dxf.zip"
+  },
+  {
+    "id": "imu_im10a",
+    "name": "Hiwonder IM10A 10-axis IMU, metal shell version",
+    "qty": 1,
+    "size_mm": [
+      59.5,
+      49.5,
+      11.7
+    ],
+    "mass_g": 50,
+    "mount": "Metal shell with 2 side flanges and 2 holes in each flange (4 holes). Hole size and spacing are not published. Measure the part. The bare board is 42.2 x 29.6 mm with 4 corner holes and brass standoffs.",
+    "electrical": "USB-C to a USB-serial chip (Linux: /dev/ttyUSB0). Also 3.3 V TTL UART and I2C (400 kHz) on pin headers. Supply 5 V or 3.3 V, 12 mA. Default 9600 baud, settable 4800 to 921600. Output 10 Hz default, settable 0.2 to 200 Hz. At 200 Hz only acceleration, angular velocity and angle can be on. Protocol: WitMotion WIT standard protocol, 11-byte frames, header 0x55.",
+    "source_url": "https://www.hiwonder.com/products/imu-module?variant=40375875338327",
+    "confidence": "listing",
+    "notes": "Maker is Hiwonder. The course sheet links the metal shell variant (USD 89.99). The bare board variant is USD 79.99, 42.2 x 29.6 mm, 5.7 g. The sheet price USD 70.20 is the same as the BHL battery price, so it is probably a copy error. The core module is a WitMotion JY901B (label visible in the Hiwonder board photo). Frames: 0x55, type, 8 data bytes (four int16, low byte first), checksum = low 8 bits of the sum of the first 10 bytes. 0x51 acc = v/32768*16 g, temperature = v/100 degC. 0x52 gyro = v/32768*2000 deg/s. 0x53 roll, pitch, yaw = v/32768*180 deg. 0x54 magnetic field (raw LSB). 0x56 pressure and height (two int32). 0x59 quaternion = v/32768. Commands: unlock FF AA 69 88 B5, then the setting, then save FF AA 00 00 00. Rate 200 Hz: FF AA 03 0B 00. Baud 115200: FF AA 04 06 00. Use 115200 baud or more for 200 Hz (3 frames at 200 Hz need 66 kbit/s). The Hiwonder manual names a CP2102 chip but also a CH340 driver. A community driver (kscalelabs/imu) uses the CH341 driver. Protocol: https://wit-motion.gitbook.io/witmotion-sdk/wit-standard-protocol/wit-standard-communication-protocol. Hiwonder manual: https://docs.hiwonder.com/projects/IMU-Module/en/latest/docs/1.User_Manual.html. Hiwonder downloads (PC software, ROS packages, code): https://docs.hiwonder.com/projects/IMU-Module/en/latest/docs/Appendix.html. Open-source driver with the frame parser: https://github.com/kscalelabs/imu/tree/master/imu/drivers/hiwonder"
+  },
+  {
+    "id": "lipo_6s_zeee",
+    "name": "Zeee 6S LiPo 5000 mAh 22.2 V 120C, EC5, hard case",
+    "qty": 2,
+    "size_mm": [
+      138.0,
+      47.0,
+      48.5
+    ],
+    "mass_g": 603,
+    "mount": "No holes. Hold it with a strap or a tray. Leave space for the EC5 lead and the JST-XH balance lead at one end.",
+    "electrical": "6S1P, 22.2 V nominal, 25.2 V full, 111 Wh. 120C. EC5 discharge plug, JST-XH balance plug.",
+    "source_url": "https://www.amazon.com/dp/B0DGPMD46S",
+    "confidence": "listing",
+    "notes": "Size tolerance is +/-2 mm (Zeee listing). This is the US link in the course sheet and also the battery in the BHL BOM. The Korean link in the course sheet is a different pack. See lipo_6s_vega_alt. Two packs are 1206 g."
+  },
+  {
+    "id": "lipo_6s_vega_alt",
+    "name": "VEGA 6S LiPo 5200 mAh 22.2 V 70C, XT90S (Korean link in the course sheet)",
+    "qty": 0,
+    "size_mm": [
+      154.0,
+      51.0,
+      44.0
+    ],
+    "mass_g": 751,
+    "mount": "No holes. Strap or tray.",
+    "electrical": "6S1P, 22.2 V nominal, 115 Wh. 70C. XT90S anti-spark plug as sold. The course wants EC5.",
+    "source_url": "https://www.rcbank.co.kr/shop/goods/goods_view.php?goodsno=66947",
+    "confidence": "listing",
+    "notes": "The Korean link (rcbank goods 66947, KRW 125,000) in the course sheet points to this pack, not to the Zeee pack. If the TA buys this pack, set qty to 2 here and 0 on lipo_6s_zeee. It is 16 mm longer and 148 g heavier per pack. The listing also gives 154 x 44 x 51 mm in a second place."
+  },
+  {
+    "id": "lipo_3s_dinogy",
+    "name": "Dinogy Graphene 3S LiPo 11.1 V 6000 mAh 80C",
+    "qty": 1,
+    "size_mm": [
+      138.0,
+      46.0,
+      30.0
+    ],
+    "mass_g": 362,
+    "mount": "No holes. Strap or tray.",
+    "electrical": "3S1P, 11.1 V nominal, 12.6 V full, 66.6 Wh. 80C. The shop sells it with Deans, XT60, EC5, XT90 or XT90S. The course sheet asks for EC5.",
+    "source_url": "https://www.rcbank.co.kr/shop/goods/goods_view.php?goodsno=102623",
+    "confidence": "listing",
+    "notes": "This is the Korean link in the course sheet (KRW 76,400). Brand is Dinogy. We did not find a Dinogy datasheet for this size."
+  },
+  {
+    "id": "boost_ham5925",
+    "name": "HAM5925 DC/DC boost converter 150 W, IN 10-32 V, OUT 12-35 V, 10 A, CV/CC",
+    "qty": 1,
+    "size_mm": [
+      65.0,
+      35.0,
+      21.0
+    ],
+    "mass_g": 45,
+    "mount": "Probably 4 holes about 3 mm near the board corners. Not verified.",
+    "electrical": "Non-isolated boost. Input 10-32 V. Output 12-35 V, adjustable. 10 A input max. 150 W with a fan, about 100 W without. Output must be higher than the input. Similar modules have no reverse-polarity protection. Screw terminals for input and output.",
+    "source_url": "https://www.icbanq.com/P017179148",
+    "confidence": "estimate",
+    "notes": "icbanq gives no size. Size and mass are from the common 150 W 10-32 V to 12-35 V boost module listings (65 x 35 x 21 mm). The CV/CC version with current pots can be a little bigger. Measure the part."
+  },
+  {
+    "id": "diode_mbrt400100",
+    "name": "MBRT400100 Schottky diode module, 100 V 400 A, three-tower package",
+    "qty": 1,
+    "size_mm": [
+      92.7,
+      20.3,
+      18.3
+    ],
+    "mass_g": 75,
+    "mount": "2 holes 7.0 to 7.5 mm, 80 mm apart, on an isolated base plate. Bolt it to metal to remove heat.",
+    "electrical": "Common-cathode pair (2 x 200 A). 3 lug terminals with 1/4-20 UNC screws. Centre terminal is the common cathode. VF max 0.84 V per leg at 200 A. Isolated base plate.",
+    "source_url": "https://www.diodemodule.com/rectifier-module/schottky/mbrt400100.pdf",
+    "confidence": "datasheet",
+    "notes": "Size values are the datasheet maxima. Body (nameplate) is 60.5 to 62.5 mm long. Mass is an estimate from similar three-tower modules. Our reading: the two anodes take one 6S pack each and the cathode feeds the motor bus. This joins the two packs without back-feeding. The 'R' version has the opposite polarity."
+  },
+  {
+    "id": "relay_aep18024",
+    "name": "Panasonic AEP18024 DC power relay, 80 A, 1 Form A (SPST-NO), 24 V coil",
+    "qty": 1,
+    "size_mm": [
+      75.5,
+      40.0,
+      79.0
+    ],
+    "mass_g": 400,
+    "mount": "2 holes 6 mm on a diagonal: 63.5 mm apart in L and 26 mm apart in W. M5 screws, 3 to 4 N m. Any mounting direction.",
+    "electrical": "Coil 24 V DC, 176 mA, 136 ohm, 4.2 W. Operate at max 18 V (75 %). Release at min 2 V. Max coil voltage 32 V (133 %). Coil plug Yazaki 7283-1020 with 300 mm leads (included). Contacts 80 A at 400 V DC. Load terminals are M5 studs, 44.9 mm apart, and are polarized: terminal 1 is (+) input.",
+    "source_url": "https://api.pim.na.industrial.panasonic.com/file_stream/main/fileversion/398",
+    "confidence": "datasheet",
+    "notes": "Body is 75 mm high. 79 mm includes the M5 bolts on top. The datasheet says 'Not recommended for new design' from 1 October 2025. Panasonic rates contact life with a varistor across the coil. A diode makes the life shorter. Use wire of 15 mm2 or more on the load terminals for 80 A (datasheet). It is the heaviest single electrical part."
+  },
+  {
+    "id": "switch_pushlock_24v",
+    "name": "Kacon (Konhung) push-lock switch 1A1B, 24 V DC LED, 22 mm, NF22-BA3C1",
+    "qty": 1,
+    "size_mm": [
+      30.0,
+      30.0,
+      45.0
+    ],
+    "mass_g": 25,
+    "mount": "Panel hole 22.3 mm (NF22 series). Ring nut.",
+    "electrical": "1 NO + 1 NC, push-lock (maintained). LED lamp 24 V DC. NF22 series contacts are rated 3 A.",
+    "source_url": "https://www.icbanq.com/P017196445",
+    "confidence": "estimate",
+    "notes": "Size is [bezel width, bezel width, depth behind the panel]. Bezel and depth are estimates for a 22 mm pushbutton. The 22.3 mm panel hole and 3 A rating are from NF22 series listings (Digi-Key, KOINO brand). Measure before you fix the panel layout."
+  },
+  {
+    "id": "switch_pushlock_12v",
+    "name": "Kacon (Konhung) push-lock switch 1A1B, 12 V DC LED, 16 mm, KBL16AT-L2C1",
+    "qty": 1,
+    "size_mm": [
+      19.0,
+      19.0,
+      40.0
+    ],
+    "mass_g": 15,
+    "mount": "Panel hole 16 mm. Ring nut.",
+    "electrical": "1 NO + 1 NC, push-lock. LED lamp 12 V DC.",
+    "source_url": "https://www.icbanq.com/P017197713",
+    "confidence": "estimate",
+    "notes": "Size is [bezel width, bezel width, depth behind the panel]. Only the 16 mm size and the 12 V LED come from the listing. The rest is an estimate for a 16 mm metal pushbutton."
+  },
+  {
+    "id": "estop_a20",
+    "name": "E-stop: Menics A20 series 22 mm mushroom operator with 3 x A20-E01P (1 NC) contact blocks",
+    "qty": 1,
+    "size_mm": [
+      40.0,
+      40.0,
+      60.0
+    ],
+    "mass_g": 60,
+    "mount": "Panel hole 22.3 mm (standard 22 mm series). Ring nut.",
+    "electrical": "3 NC contacts in series or separate. The course note says 24 V DC is available on the e-stop chain.",
+    "source_url": "https://www.wolfautomation.com/contact-block-1nc-for-pushbuttons-o22mm",
+    "confidence": "estimate",
+    "notes": "Size is [head diameter, head diameter, depth behind the panel with 3 blocks]. The head sticks out about 30 to 35 mm in front of the panel. A20-E01P is a Menics A20 series 1 NC block. We did not find the Menics drawing. A Menics 3 NC e-stop part is A20B-V4E03R. Measure the part from ASMR2024."
+  },
+  {
+    "id": "canable_v2_pro",
+    "name": "Makerbase MKS CANable V2.0 Pro, isolated USB to CAN FD",
+    "qty": 2,
+    "size_mm": [
+      52.0,
+      16.0,
+      12.0
+    ],
+    "mass_g": 8,
+    "mount": "Hole pattern not verified. The non-Pro V2.0 (45.0 x 16.2 mm) has 4 holes 2.2 mm, 34.7 x 12.6 mm apart. The Pro board may differ.",
+    "electrical": "USB-C, powered from USB 5 V (3.3-5 V). STM32G431C8T6 and ADM3050 isolated CAN FD transceiver, 5.7 kV rms signal isolation. CAN 2.0A/B and CAN FD, 1 Mbit/s classic. Screw terminal for CAN_H, CAN_L and GND. 120 ohm termination: on-board jumper (shorting cap), not a switch. BOOT jumper for DFU. Firmware candleLight (gs_usb, SocketCAN) or slcan.",
+    "source_url": "https://www.devicemart.co.kr/goods/view?no=15775527",
+    "confidence": "listing",
+    "notes": "PCB size 52.0 x 16.0 x 1.6 mm is from the Amazon 'Macrobase CANable PRO V2.0' listing. H 12 mm is an estimate (screw terminal). Mass is an estimate. Makerbase publishes no Pro drawing (github.com/makerbase-mks/CANable-MKS has the V2.0 only). A known bug: after a quick reset it may not boot. Leave it unpowered about 2 s (github.com/SebKuzminsky/mks-canable-2.0-pro). Jumper method: Makerbase README for V2.0, CANable docs for the Pro, and seller listings."
+  },
+  {
+    "id": "meter_hav1808",
+    "name": "HAV1808 panel voltmeter 3.5-30 V, waterproof",
+    "qty": 1,
+    "size_mm": [
+      48.0,
+      29.0,
+      22.0
+    ],
+    "mass_g": 15,
+    "mount": "Panel mount. Cut-out about 45.5 x 26.5 mm if it is the 0.56 inch type.",
+    "electrical": "2-wire. Powered from the measured voltage, 3.5-30 V. Good for 6S (25.2 V max).",
+    "source_url": "https://www.icbanq.com/P017177967",
+    "confidence": "estimate",
+    "notes": "icbanq gives no size. Size is a guess for a 0.56 inch panel meter. Some 3.5-30 V 2-wire meters are the smaller 0.28 inch type (about 23 x 15 mm). Measure the part."
+  },
+  {
+    "id": "meter_hav6001",
+    "name": "HAV6001 panel volt and current meter 0-100 V, 100 A",
+    "qty": 1,
+    "size_mm": [
+      48.0,
+      29.0,
+      21.0
+    ],
+    "mass_g": 20,
+    "mount": "Panel cut-out 45.5 x 26.5 mm (some listings say 46 x 27 mm).",
+    "electrical": "Uses an external shunt. 100 A needs a 100 A / 75 mV shunt. Some kits ship a 50 A shunt. Meter supply 4.5-30 V. Above 30 V it needs its own supply.",
+    "source_url": "https://www.icbanq.com/P017179301",
+    "confidence": "listing",
+    "notes": "Size and shunt facts are from listings of the common 0-100 V 100 A dual meter (Grobotronics, Sigmanortec, eBuild). icbanq gives no size. See shunt_100a."
+  },
+  {
+    "id": "shunt_100a",
+    "name": "Shunt 100 A / 75 mV for HAV6001",
+    "qty": 1,
+    "size_mm": [
+      105.0,
+      40.0,
+      25.0
+    ],
+    "mass_g": 80,
+    "mount": "2 holes in an insulating base, near the ends.",
+    "electrical": "Goes in the negative lead of the motor bus. 2 big bolts for the bus wires, 2 small screws for the sense wires.",
+    "source_url": "https://www.sigmanortec.ro/en/voltmeter-with-digital-ammeter-0-100v-0-100a-with-shunt",
+    "confidence": "estimate",
+    "notes": "105 x 40 mm is from one listing. Height and mass are estimates. Check which shunt comes in the box."
+  },
+  {
+    "id": "meter_hav1625a",
+    "name": "HAV1625a panel ammeter 4-30 V, 10 A",
+    "qty": 1,
+    "size_mm": [
+      48.0,
+      29.0,
+      22.0
+    ],
+    "mass_g": 20,
+    "mount": "Panel mount. Cut-out about 45.5 x 26.5 mm if it is the 0.56 inch type.",
+    "electrical": "Probably an internal shunt (10 A range). Supply 4-30 V.",
+    "source_url": "https://www.icbanq.com/P017179547",
+    "confidence": "estimate",
+    "notes": "icbanq gives no size and no shunt type. Size is a guess for a 0.56 inch panel meter. Measure the part."
+  },
+  {
+    "id": "xdrive_mini",
+    "name": "Makerbase XDrive MINI motor driver (ODrive v3.6 based), reference only",
+    "qty": 12,
+    "size_mm": null,
+    "mass_g": null,
+    "mount": null,
+    "electrical": "Single-axis FOC driver. CAN on a 4-pin JST-SH connector. USB-C for setup. 24 V bus from the 6S packs.",
+    "source_url": "https://www.devicemart.co.kr/goods/view?no=15775528",
+    "confidence": "estimate",
+    "notes": "Not verified. A devicemart category page shows 25.8 x 21 x 1.6 mm next to this item. That looks too small for a 120 A peak driver. It sits on each actuator, not in the torso."
+  },
+  {
+    "id": "camera_b0201",
+    "name": "Arducam B0201 USB camera, Sony IMX291 2 MP, M12 lens 120 deg",
+    "qty": 1,
+    "size_mm": [
+      38.0,
+      38.0,
+      25.0
+    ],
+    "mass_g": 25,
+    "mount": "38 x 38 mm board. Holes fit 34 x 34 mm and 28 x 28 mm patterns (welectron listing). Probably M2.",
+    "electrical": "USB 2.0 UVC. 5 V, 300 mA max. 1 m cable.",
+    "source_url": "https://welectron.com/Arducam-B0201-2MP-IMX291-120-Low-Light-Camera-with-USB-20-UVC-S-Mount_1",
+    "confidence": "listing",
+    "notes": "H 25 mm (board plus M12 lens and holder) and the 25 g mass without cable are estimates. Shipping weight with cable is 70 g. Robotshop lists 36 x 36 mm for a similar Arducam board. Measure the hole spacing before printing a bracket."
+  },
+  {
+    "id": "ref_bhl_battery",
+    "name": "Reference: BHL battery, Zeee 6S 5000 mAh 120C (BHL BOM link)",
+    "qty": 0,
+    "size_mm": [
+      138.0,
+      47.0,
+      48.5
+    ],
+    "mass_g": 603,
+    "mount": null,
+    "electrical": "6S, 22.2 V.",
+    "source_url": "https://docs.google.com/spreadsheets/d/1AQEHcH_nPkXYfor2-h7bwNIUMmsePtAm53epnsWgZXc",
+    "confidence": "listing",
+    "notes": "The BHL BOM sheet links the same Amazon item as the course (B0DGPMD46S), qty 1. The BHL paper says 6S 4000 mAh instead. We found no mass for a 4000 mAh pack. The course robot carries 2 of these plus a 3S pack: 1568 g against 603 g on the BHL."
+  },
+  {
+    "id": "ref_bhl_pc",
+    "name": "Reference: BHL computer, Beelink Mini S12 (Intel N95)",
+    "qty": 0,
+    "size_mm": [
+      115.0,
+      102.0,
+      39.0
+    ],
+    "mass_g": 280,
+    "mount": null,
+    "electrical": "12 V 3 A on a DC 5.5 x 2.5 mm jack. About 15 W.",
+    "source_url": "https://www.amazon.com/dp/B0BVLPCDVW",
+    "confidence": "listing",
+    "notes": "Link from the BHL BOM sheet. 280 g is from retailer listings (some say 41 mm high). The ROCK 3C is about 235 g lighter. The 12 V DC 5.5 x 2.5 mm jack explains the DC5525-XT60 cable and the 3S pack in the course sheet."
+  },
+  {
+    "id": "acrylic_b4_5mm",
+    "name": "Acrylic plate 5 mm, B4",
+    "qty": 1,
+    "size_mm": [
+      364.0,
+      257.0,
+      5.0
+    ],
+    "mass_g": 557,
+    "mount": "Cut and drill as needed.",
+    "electrical": "Insulator.",
+    "source_url": "https://smartstore.naver.com/sol321/products/10278086239",
+    "confidence": "estimate",
+    "notes": "Korean shops use JIS B4 = 257 x 364 mm. 257 x 364 x 5 mm = 467.7 cm3, x 1.19 g/cm3 = 557 g. ISO B4 is 250 x 353 mm: 441.2 cm3 = 525 g. Mass is for the full uncut plate."
+  },
+  {
+    "id": "profile_2020_200",
+    "name": "Aluminium profile 2020, 200 mm",
+    "qty": 2,
+    "size_mm": [
+      200.0,
+      20.0,
+      20.0
+    ],
+    "mass_g": 90,
+    "mount": "6 mm slots, M5 centre hole (typical 2020).",
+    "electrical": null,
+    "source_url": "https://www.yjprofile.co.kr/goods/goods_view.php?goodsNo=1000000042",
+    "confidence": "estimate",
+    "notes": "Maker Kyunghee Profile. The shop gives no kg/m. 2020 profiles weigh 0.40 to 0.50 kg/m (Framingtech 0.40, Systeal V-slot 0.456, Haluminium 0.50). 200 mm is 80 to 100 g. 90 g is the middle."
+  },
+  {
+    "id": "buck_12v_to_5v",
+    "name": "Pololu D36V50F5 step-down regulator, 5 V 5.5 A, for the ROCK 3C (NOT in the course BOM)",
+    "qty": 1,
+    "size_mm": [
+      25.4,
+      25.4,
+      10.0
+    ],
+    "mass_g": 7,
+    "mount": "No mounting holes used. It sits in a rail pocket on the pod basket lip with 1 mm foam tape (kit.py).",
+    "electrical": "5.5-50 V in, 5 V out, 5.5 A typical. Reverse-voltage, over-current and over-temperature protection. Feeds ROCK 3C header pins 2 and 4 (docs/hardware/electrical.md).",
+    "source_url": "https://www.pololu.com/product/4091",
+    "confidence": "listing",
+    "notes": "Team choice (devicemart 12536510). 25.4 x 25.4 mm from Pololu. Height 10 mm and mass 7 g are estimates. Spare: SZH-EK366."
+  },
+  {
+    "id": "pump_klp02",
+    "name": "Kamoer KLP02 24 V brushless pump, with a DMC-101 DC pump controller (team choice, 2026-10-22)",
+    "qty": 1,
+    "size_mm": null,
+    "mass_g": 250,
+    "mount": "Not drawn yet. Kamoer does not publish the size. The printed pump holder fits the DWP-385 (pump_dwp385). We will draw a KLP02 holder when the pump arrives and is measured.",
+    "electrical": "Kamoer data for the 24 V brushless KLP02: flow 0.7 L/min or more, head 30 m or more, suction lift 4 m or more, 12 W or less, switch control. Proposed wiring: 24 V from the motor bus after relay K1 (the e-stop cuts it), fuse F14 3 A, DMC-101 controller, on/off from ROCK 3C pin 11 (GPIO3_A1) through an opto-isolator (robot/pump.py).",
+    "source_url": null,
+    "confidence": "datasheet",
+    "notes": "Size: not published. Mass: about 250 g (Kamoer, 24 V brushless type). Port size: not published. The DMC-101 datasheet is not available yet, so its size, mass and control input are not known. The CAD layout and the robot mass still use the DWP-385 (130 g) in its holder."
+  },
+  {
+    "id": "pump_dwp385",
+    "name": "motorbank DWP-385 12 V 2-stage gear pump, self-priming. No longer used: the printed pump holder fits this pump",
+    "qty": 0,
+    "size_mm": [
+      99.0,
+      34.0,
+      48.0
+    ],
+    "mass_g": 130,
+    "mount": "Two ears on the pump head (hole spacing not published). The printed pump holder (kit/stl/pump_holder.stl) on the rear of the middle shelf fits this pump: two saddles and a 250 mm strap. The holder does not use the ears.",
+    "electrical": "12 V brushed, 0.7-1.1 A at 11.1 V. On/off through the DFR0457 MOSFET module. SB560 flyback diode across the leads.",
+    "source_url": "https://www.eleparts.co.kr/goods/view?no=3850995",
+    "confidence": "estimate",
+    "notes": "About 87 mm long, 32 mm motor, 130 g. Size here = 87 mm body + 12 mm barbs, 34 mm head, 48 mm ear span: the head and ear sizes are guesses. The CAD layout and the robot mass use this pump in its holder until a KLP02 holder exists."
+  },
+  {
+    "id": "mosfet_dfr0457",
+    "name": "DFRobot Gravity MOSFET power controller DFR0457, the switch of the DWP-385 pump. Not used with the KLP02",
+    "qty": 0,
+    "size_mm": [
+      44.0,
+      32.0,
+      15.0
+    ],
+    "mass_g": 10,
+    "mount": "Rail pocket on the pod basket lip with 1 mm foam tape. The pocket stays in the basket. The CAD layout still counts this module.",
+    "electrical": "Control 3.3-10 V, load 5-36 V DC, 20 A. Gate from ROCK 3C pin 11 with a 10 kOhm pull-down.",
+    "source_url": "https://www.icbanq.com/P007616427",
+    "confidence": "estimate",
+    "notes": "44 x 32 mm from docs/hardware/electrical.md. Height and mass are estimates. The KLP02 takes its on/off signal through an opto-isolator into the DMC-101 controller."
+  },
+  {
+    "id": "relay_k2_kka_k4",
+    "name": "Relay K2: KKA-K4 automotive relay, 24 V coil, 40 A (e-stop cut of the pan-tilt servos)",
+    "qty": 1,
+    "size_mm": [
+      28.0,
+      28.0,
+      35.0
+    ],
+    "mass_g": 30,
+    "mount": "On the pod plate with foam tape and one zip tie through 2 holes (pod_plate_al2 drawing).",
+    "electrical": "Coil 24 V, about 0.1 A (Assumed). Contacts 30 -> 87, 6.3 mm spades.",
+    "source_url": "https://www.devicemart.co.kr/goods/view?no=14822397",
+    "confidence": "estimate",
+    "notes": "Size is a typical mini ISO relay (28 x 28 x 25 mm body) plus 10 mm for the spade connectors. Mass is an estimate."
+  },
+  {
+    "id": "brake_resistor_rh50",
+    "name": "Brake resistor RARA RH50C4R70J, 4.7 Ohm 50 W, aluminium housing",
+    "qty": 2,
+    "size_mm": [
+      71.0,
+      30.0,
+      16.0
+    ],
+    "mass_g": 31,
+    "mount": "4 holes. ASSUMED 39.7 x 21.4 mm pattern, M3 (RH-50 industry pattern). On a printed mount on the front face of the front bottom rail.",
+    "electrical": "On the AUX terminal of each hip-roll drive (W10, W11). 1.2 W mean for both (docs/hardware/electrical.md).",
+    "source_url": "https://www.devicemart.co.kr/goods/view?no=33451",
+    "confidence": "estimate",
+    "notes": "71 x 30 x 16 mm and 31 g from docs/hardware/electrical.md. Check the hole pattern before you press the inserts."
+  }
+]

@@ -1,0 +1,132 @@
+{
+ "tilt_axis_mm": [
+  -38.0,
+  0.0,
+  63.01
+ ],
+ "pan_axis_mm": [
+  -38.0,
+  0.0
+ ],
+ "tilting": [
+  "tilt_u",
+  "payload_plate",
+  "cam_usb32",
+  "cam_mlx90640",
+  "cam_purethermal",
+  "ref_gun"
+ ],
+ "alternatives": [],
+ "parts": {
+  "deck": {
+   "volume_cm3": 107.9,
+   "mass_g": 91,
+   "mass_solid_g": 134,
+   "bbox_mm": [
+    158.0,
+    130.0,
+    6.0
+   ],
+   "min_wall_scan_mm": 2.5
+  },
+  "pan_base": {
+   "volume_cm3": 37.8,
+   "mass_g": 36,
+   "mass_solid_g": 47,
+   "bbox_mm": [
+    80.0,
+    80.0,
+    47.0
+   ],
+   "min_wall_scan_mm": 2.98
+  },
+  "pan_yoke": {
+   "volume_cm3": 34.1,
+   "mass_g": 29,
+   "mass_solid_g": 42,
+   "bbox_mm": [
+    76.0,
+    76.0,
+    29.3
+   ],
+   "min_wall_scan_mm": 2.0
+  },
+  "tilt_u": {
+   "volume_cm3": 26.3,
+   "mass_g": 24,
+   "mass_solid_g": 33,
+   "bbox_mm": [
+    56.0,
+    51.8,
+    38.0
+   ],
+   "min_wall_scan_mm": 2.05
+  },
+  "payload_plate": {
+   "volume_cm3": 119.4,
+   "mass_g": 109,
+   "mass_solid_g": 148,
+   "bbox_mm": [
+    200.0,
+    158.0,
+    17.0
+   ],
+   "min_wall_scan_mm": 2.5
+  },
+  "cam_usb32": {
+   "volume_cm3": 12.0,
+   "mass_g": 13,
+   "mass_solid_g": 15,
+   "bbox_mm": [
+    44.9,
+    38.0,
+    41.5
+   ],
+   "min_wall_scan_mm": 2.05
+  },
+  "cam_mlx90640": {
+   "volume_cm3": 9.3,
+   "mass_g": 10,
+   "mass_solid_g": 12,
+   "bbox_mm": [
+    42.8,
+    31.4,
+    34.6
+   ],
+   "min_wall_scan_mm": 2.05
+  }
+ },
+ "gun_com_dx_mm": -22.0,
+ "heights_mm": {
+  "pan_bearing": [
+   11.0,
+   18.0
+  ],
+  "turntable": [
+   19.0,
+   24.0
+  ],
+  "tilt_axis": 63.01,
+  "u_base": [
+   81.9781464171644,
+   87.9781464171644
+  ],
+  "plate_top": 92.9781464171644
+ },
+ "com_no_gun": {
+  "mass_kg": 0.531,
+  "xyz_m": [
+   -0.022,
+   -0.001,
+   0.831
+  ]
+ },
+ "com_with_gun": {
+  "mass_kg": 1.431,
+  "xyz_m": [
+   -0.046,
+   -0.0,
+   0.891
+  ]
+ }
+}
