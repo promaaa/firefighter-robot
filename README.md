@@ -1,14 +1,10 @@
 # Sobang-I · firefighting humanoid
 
-[![tests](https://github.com/promaaa/firefighter-robot/actions/workflows/tests.yml/badge.svg)](https://github.com/promaaa/firefighter-robot/actions/workflows/tests.yml)
-
 <img src="cad/final/renders/f2_front.jpg" alt="Final design F2" width="300" align="right">
 
 Sobang-I finds a small fire with its camera, walks to it and puts it out with a water jet. It is built on the legs of the open-source [Berkeley Humanoid Lite](https://github.com/HybridRobotics/Berkeley-Humanoid-Lite).
 
-Team SOBANG · Seoul National University · ASMR 2026. Final demo on 10 December 2026.
-
-**Status (22 October 2026):** actuators in print and assembly. Final design F2, print kit and wiring drawings are ready. Walking, fire detection, aiming and the full mission are tested in simulation.
+Team SOBANG · Seoul National University · ASMR 2026.
 
 | Start here | |
 |---|---|
