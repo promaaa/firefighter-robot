@@ -16,14 +16,15 @@ jobs:
         run: scripts/fetch_bhl_assets.sh
       - name: Install the environment
         run: uv sync --locked
+      - name: Build the MuJoCo robot models
+        working-directory: sim/payload
+        run: uv run python models.py
       - name: Robot software (aim, actuators, robot)
         run: uv run pytest -q
       - name: Leg bring-up kit
         run: uv run pytest legs -q
       - name: Mission simulation
-        run: |
-          (cd sim/payload && uv run python models.py)
-          uv run pytest sim/mission/test_mission.py -q
+        run: uv run pytest sim/mission/test_mission.py -q
       - name: Fire detector
         working-directory: vision
         run: uv run --no-project --with numpy --with onnx --with onnxruntime --with opencv-python-headless --with pillow --with pytest pytest test_vision.py -q
