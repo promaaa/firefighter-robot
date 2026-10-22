@@ -43,7 +43,7 @@ DOWNLOADS = {  # file in raw/ -> URL, pinned to the revision used on 2026-10-15
                                          "annotations_trainval2017.zip",
     "coco_val2017.zip": f"{HF}/pcuenq/coco-2017-mirror/resolve/a4cd8b69bd45a35e9a0a9c8692f3a7f4f23321fe/val2017.zip",
     "coco_train2017.zip": f"{HF}/pcuenq/coco-2017-mirror/resolve/a4cd8b69bd45a35e9a0a9c8692f3a7f4f23321fe/train2017.zip",
-    "firescenes_v1.zip": "https://github.com/promaaa/vision-sobang/releases/download/firescenes-v1/firescenes_v1.zip",
+    "firescenes_v1.zip": "https://github.com/promaaa/firefighter-robot/releases/download/firescenes-v1/firescenes_v1.zip",
 }
 
 # COCO captions: an image is "fire-like" when a caption names a fire-coloured object or a light,

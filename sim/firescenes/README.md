@@ -21,7 +21,7 @@ The samples are not in git: they are about 50 MB in 5,900 files. Only `out/conta
 To get the rendered samples without Blender, run these commands from the repository root:
 
 ```bash
-curl -L -o firescenes_v1.zip https://github.com/promaaa/vision-sobang/releases/download/firescenes-v1/firescenes_v1.zip
+curl -L -o firescenes_v1.zip https://github.com/promaaa/firefighter-robot/releases/download/firescenes-v1/firescenes_v1.zip
 ```
 
 ```bash
