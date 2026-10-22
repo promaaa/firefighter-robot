@@ -1,0 +1,110 @@
+# Robot runtime config: ports, devices, pins, ids, limits, camera and policy. One file for all nodes.
+# Units: s, m, rad, Hz, unless the key name says otherwise (_deg, _dps).
+# Values marked CHECK are first guesses. Check them on the robot (robot/README.md, "Bring-up on the robot").
+# Relative paths start at the repository root.
+
+[ports]  # UDP on 127.0.0.1. Each port has one reader. ROBOT_PORT_OFFSET moves them all (tests).
+detections = 5600    # camera node -> aim/run.py (interface v2 frame messages)
+actuator_cmd = 5601  # aim/run.py -> actuator node (pan, tilt, pump_on)
+walk_cmd = 5602      # aim/run.py -> legs/run_policy.py --udp (vx, yaw_rate)
+feedback = 5603      # actuator node -> aim/run.py --feedback (measured pan, tilt, water)
+feedback_sim = 5604  # actuator node -> fake camera (--sim) and aim/send_test_detections.py --feedback
+pose = 5605          # legs/run_policy.py -> aim/run.py (pose estimate: x, y, yaw, roll, pitch)
+supervisor = 5606    # every node -> robot/launch.py (heartbeats), and launch.py --send (ready, stop)
+sim_truth = 5607     # fake legs -> fake camera: the true MuJoCo torso pose (--sim only)
+
+[robot]
+concept = "F2"  # final design F2: pan-tilt, camera and nozzle geometry and controller values of aim/geometry.py CONCEPTS
+
+[camera]
+detector = ""                  # file with detect(rgb, t). "" = vision/detector.py when it exists, else sim/sim2sim/baseline_detector.py (colour threshold)
+device = "/dev/video-fire"     # udev symlink (robot/setup), Arducam B0201
+usb = ""                       # USB vendor:product of the camera (lsusb), for the /dev/video-fire symlink. Not found in the docs.
+input_format = "mjpeg"         # the B0201 gives 30 fps only in MJPEG
+width = 640
+height = 480
+fps = 15
+hfov_deg = 97.1                # B0201: 4:3 crop of the 16:9 sensor, pinhole (vision/README.md). CHECK with vision/calibrate.py.
+latency_s = 0.0                # image age when the frame arrives. Measure it, then the aim delay compensation uses it.
+
+[aim.controller]  # overrides of ControllerConfig fields in aim/controller.py. Empty = the defaults there.
+# v0 = 10.0       # m/s, jet speed. Put the mean v0 of `robot/bench.py pump` here (robot/README.md, bring-up step 8).
+
+[actuator]
+rate_hz = 50
+cmd_timeout_s = 0.5            # no command for this long: water off, servos hold
+servo_port = "/dev/servo"      # udev symlink to the Waveshare Bus Servo Adapter (A)
+servo_usb = "1a86:55d3"        # CH343 on the adapter, cdc_acm driver (/dev/ttyACM*). Check it with lsusb.
+
+# Pan and tilt servos (ST3215). zero = servo steps at angle 0. Calibration: actuators/README.md.
+[actuator.pan]
+id = 1
+zero = 2048
+direction = 1
+min_deg = -90     # the pan limits of aim/geometry.py F2: -90 to 90 deg
+max_deg = 90
+max_speed_dps = 180
+
+[actuator.tilt]
+id = 2
+zero = 2048
+direction = 1
+min_deg = -40     # the tilt limits of aim/geometry.py F2: -40 to 45 deg. Make them smaller if the nozzle touches something.
+max_deg = 45
+max_speed_dps = 180
+
+[pump]  # Kamoer KLP02 24 V pump through the DMC-101 controller. On/off from header pin 11 through an opto-isolator
+        # (proposed wiring: docs/hardware/electrical.md). The software only switches one GPIO line.
+chip = "/dev/gpiochip3"   # header pin 11 = GPIO3_A1. CHECK the chip number with gpiodetect (robot/README.md, header pins).
+line = 1                  # line offset in the chip: GPIO3_A1 = (A=0) * 8 + 1
+active_low = false        # true when the pump runs while the pin is low. CHECK with a meter before you connect the pump.
+max_spray_s = 12.0        # pump off after this long on, until the next "off" command. Backstop above the aim max_spray (F2: 11 s).
+keepalive_s = 0.3         # pump off when the actuator node stops updating the pump for this long (a hung loop)
+estop_chip = ""           # optional e-stop input: one NC contact to GND, internal pull-up. "" = not wired.
+estop_line = 2            # with estop_chip = "/dev/gpiochip3": header pin 13 = GPIO3_A2
+
+[walk]  # walk command from aim/run.py into the policy (actuators/walk_bridge.py)
+timeout_s = 0.5   # no command for this long: velocity 0, the robot stands
+vx_max = 0.5      # m/s, the training range of the policy
+yaw_max = 1.0     # rad/s
+start_kick_vx = 0.45  # m/s: from a stand, send at least this for start_kick_s, so the policy starts to step
+start_kick_s = 0.5    # s. 0 = no kick. Fake legs: 0.25 m/s from a stand moved 0.02 m in 9.5 s, with the kick 1.4 to 2.4 m.
+
+[legs]
+policy = "sim/sim2sim/policy_biped_25hz_a.onnx"  # the shipped BHL policy. Our policy: "sim/rl/policies/f1_v1.onnx" (legs/README.md, part F)
+knee_max = 1.4    # rad, knee target limit. F2: at full knee range the foot touches a tank.
+max_run_s = 600   # the policy stops after this time, as a last limit for one mission
+
+[can]  # two CANable 2.0 Pro (candleLight firmware, gs_usb driver)
+usb = "1d50:606f"                  # candleLight USB vendor:product
+channels = ["can_left", "can_right"]  # interface names. robot/setup gives them by USB serial number.
+left_serial = ""                   # USB serial of the left leg adapter: robot/setup/install.sh --list-usb
+right_serial = ""                  # USB serial of the right leg adapter
+bitrate = 500000
+txqueuelen = 100                   # the default 10 frames is too short for 12 frames per cycle
+restart_ms = 100                   # restart the bus 100 ms after a bus-off error
+
+[imu]  # Hiwonder IM10A on a header UART (robot/README.md, header pins)
+port = "/dev/imu"              # udev symlink to the UART below
+uart = "ttyS4"                 # UART4_M1: IMU TX to pin 16 (RX), IMU RX to pin 18 (TX)
+overlay = "rk3568-uart4-m1"    # device tree overlay that switches the UART on. Pins 8 and 10: "ttyS2" and "rk3568-uart2-m0".
+baud = 230400                  # after legs/imu.py --setup. A new IMU sends at 9600.
+
+[launch]
+log_dir = "robot/logs"
+first_heartbeat_s = 20.0   # a started node must send its first heartbeat within this time
+stop_wait_s = 6.0          # wait this long for a node to stop, then kill it
+
+[launch.heartbeat_timeout_s]  # a node that sends nothing for this long is hung: safe stop
+camera = 1.5
+aim = 1.0
+actuator = 0.5
+legs = 0.5
+
+[sim]  # the fake world of --sim: fires on the floor, seen by a synthetic camera
+fires = [[2.5, 1.0]]  # m, (x, y) in the start frame of the robot: x forward, y left. The robot turns and walks to it.
+bench_fires = [[1.5, 0.4]]  # m, with --bench: the robot does not walk, so the fire is within the 2 m stop distance
+fire_radius = 0.15    # m
+hit_radius = 0.25     # m, a jet that lands this close to a fire puts water on it
+burn_s = 3.0          # s of water on a fire that put it out
+detector = "sim/sim2sim/baseline_detector.py"  # the synthetic camera draws colour blobs: the colour-threshold detector sees them

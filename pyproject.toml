@@ -1,0 +1,27 @@
+[project]
+name = "firefighter-robot"
+version = "0.1.0"
+description = "Firefighter robot on the Berkeley Humanoid Lite legs: aiming code, actuator drivers and MuJoCo simulations"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "numpy==2.5.3",
+    "scipy>=1.18",
+    "matplotlib>=3.11",
+    "pillow>=12",
+    "mujoco==3.15.0",
+    "onnxruntime>=1.30",
+    "pyserial>=3.5",
+    "pytest>=9",
+    "python-can>=4.6.1",
+]
+
+[project.optional-dependencies]
+board = [
+    "gpiod>=2.2",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["aim", "actuators", "robot"]
