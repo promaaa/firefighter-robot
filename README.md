@@ -1,28 +1,36 @@
-# Firefighter Robot
+# Sobang-I · firefighting humanoid
 
-A low-cost firefighter humanoid robot. The body reuses the legs and torso of the
-open-source [Berkeley Humanoid Lite](https://arxiv.org/abs/2504.17249).
+[![tests](https://github.com/promaaa/firefighter-robot/actions/workflows/tests.yml/badge.svg)](https://github.com/promaaa/firefighter-robot/actions/workflows/tests.yml)
 
-The goal is a robot that enters a hazardous area, finds a fire, moves toward it,
-and puts it out with a mounted water nozzle or a small pump.
+<img src="cad/final/renders/f2_front.jpg" alt="Final design F2" width="300" align="right">
 
-## Roadmap
+Sobang-I finds a small fire with its camera, walks to it and puts it out with a water jet. It is built on the legs of the open-source [Berkeley Humanoid Lite](https://github.com/HybridRobotics/Berkeley-Humanoid-Lite).
 
-1. Get the Berkeley-based body to move reliably.
-2. Detect and localize fire with a lightweight onboard camera system (RGB, thermal, or both).
-3. Estimate the fire position relative to the robot.
-4. Navigate and aim toward the fire.
-5. Trigger and control the extinguisher.
-6. Increase autonomy and robustness step by step.
+Team SOBANG · Seoul National University · ASMR 2026. Final demo on 10 December 2026.
 
-## Reference
+**Status (22 October 2026):** actuators in print and assembly. Final design F2, print kit and wiring drawings are ready. Walking, fire detection, aiming and the full mission are tested in simulation.
 
-```bibtex
-@inproceedings{chi2025berkeleyhumanoidlite,
-  author    = {Yufeng Chi and Qiayuan Liao and Junfeng Long and Xiaoyu Huang and Sophia Shao and Borivoje Nikolic and Zhongyu Li and Koushil Sreenath},
-  title     = {Demonstrating Berkeley Humanoid Lite: An Open-source, Accessible, and Customizable 3D-printed Humanoid Robot},
-  booktitle = {Proceedings of Robotics: Science and Systems},
-  year      = {2025},
-  doi       = {10.15607/RSS.2025.XXI.062}
-}
+| Start here | |
+|---|---|
+| Plan, milestones, who does what next | [docs/plan](docs/plan/README.md) |
+| Final design and print kit | [docs/design.md](docs/design.md), [cad/final/kit](cad/final/kit/README.md) |
+| Electrical drawings and power-on tests | [docs/hardware/electrical.md](docs/hardware/electrical.md) |
+| Water system | [docs/hardware/water.md](docs/hardware/water.md) |
+| Robot software on the ROCK 3C | [robot](robot/README.md), [legs](legs/README.md), [aim](aim/README.md) |
+| Fire detector | [vision](vision/README.md) |
+| Simulations | [sim](sim/README.md) |
+
+## Quick start
+
+You need `git` and [uv](https://docs.astral.sh/uv/). Run from the repository root:
+
+```bash
+git clone https://github.com/promaaa/firefighter-robot.git && cd firefighter-robot
+scripts/fetch_bhl_assets.sh   # Berkeley Humanoid Lite model and meshes
+uv sync
+uv run pytest
 ```
+
+## Licence
+
+Code: [MIT](LICENSE). CAD files and documents: [CC BY-SA 4.0](LICENSES/CC-BY-SA-4.0.txt). [vision/](vision/LICENSE): AGPL-3.0, because it uses Ultralytics YOLO. The Berkeley Humanoid Lite model and meshes are CC BY-SA 4.0 and the renders show them. Please cite the Berkeley Humanoid Lite paper: Y. Chi et al., RSS 2025, [arXiv:2504.17249](https://arxiv.org/abs/2504.17249).
