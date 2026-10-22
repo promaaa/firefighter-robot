@@ -1,0 +1,25 @@
+# Environment for the fire detector work: data, training, evaluation, export and calibration (torch, Ultralytics, OpenCV).
+# The plug-in detector (detector.py) needs only onnxruntime, numpy and pillow, so it also runs in the root environment.
+# Licence of vision/: AGPL-3.0 (LICENSE), because it uses Ultralytics YOLO.
+[project]
+name = "firefighter-robot-vision"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.4",
+    "onnx>=1.23.2",
+    "onnxruntime>=1.31.0",
+    "onnxslim>=0.1.98",
+    "opencv-python-headless>=5.0.0.93",
+    "pillow>=12.3.0",
+    "pytest>=9.1.1",
+    "pyyaml>=6.0.3",
+    "torch>=2.14.1",
+    "torchvision>=0.29.1",
+    "ultralytics>=8.4.177",
+]
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'linux'"]

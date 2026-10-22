@@ -1,0 +1,19 @@
+{
+ "train": {
+  "Attribution-NoDerivs License": 365,
+  "Attribution-NonCommercial-ShareAlike License": 1888,
+  "Attribution-ShareAlike License": 645,
+  "Attribution-NonCommercial License": 973,
+  "Attribution-NonCommercial-NoDerivs License": 1777,
+  "Attribution License": 1132,
+  "No known copyright restrictions": 5
+ },
+ "val": {
+  "Attribution-NonCommercial-NoDerivs License": 102,
+  "Attribution-NoDerivs License": 19,
+  "Attribution-ShareAlike License": 39,
+  "Attribution-NonCommercial-ShareAlike License": 77,
+  "Attribution License": 50,
+  "Attribution-NonCommercial License": 43
+ }
+}

@@ -1,0 +1,4 @@
+# Pictures and videos made of dataset images or video frames stay local (licences: DATA.md, results/video_sources.md)
+results/*/examples.jpg
+results/near_duplicates.jpg
+results/demo.mp4
