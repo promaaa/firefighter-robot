@@ -1,0 +1,5 @@
+*.log
+__pycache__/
+# training runs, checkpoints and videos stay local
+runs/
+results/*.mp4

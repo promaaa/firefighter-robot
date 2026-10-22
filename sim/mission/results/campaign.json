@@ -1,0 +1,70 @@
+{
+ "f2_kit_real": {
+  "n": 50,
+  "success": 3,
+  "ci": [
+   0.020614596364630478,
+   0.16217343370877002
+  ],
+  "t_med": 49.39,
+  "t_p90": 117.302,
+  "water_med": 0.1976,
+  "water_max": 0.6012,
+  "falls": 19,
+  "aborts": 19,
+  "false_spray_missions": 16,
+  "false_spray_s": 787.3,
+  "fp_per_min": 1936.0291350262348,
+  "fires": 102,
+  "fires_out": 27,
+  "all_out": 5,
+  "all_out_fall": 2,
+  "ignored_fire": 11,
+  "ignored_other": 15,
+  "tank_empty": 4,
+  "reasons": {
+   "fall": 19,
+   "tank empty": 17,
+   "time limit": 4,
+   "search found no fire": 7
+  },
+  "wall_med": 112.45,
+  "sim_med": 113.64,
+  "on_fire": 0.5383065869871752,
+  "label": "baseline colour detector, shipped BHL policy, 6 Nm, real-fire flames"
+ },
+ "f2_real_conf03": {
+  "n": 50,
+  "success": 5,
+  "ci": [
+   0.04347512399157111,
+   0.2136049033478839
+  ],
+  "t_med": 64.71,
+  "t_p90": 87.72399999999999,
+  "water_med": 0.2687,
+  "water_max": 0.4106,
+  "falls": 13,
+  "aborts": 13,
+  "false_spray_missions": 0,
+  "false_spray_s": 0.0,
+  "fp_per_min": 0.2615641536387598,
+  "fires": 102,
+  "fires_out": 25,
+  "all_out": 6,
+  "all_out_fall": 1,
+  "ignored_fire": 16,
+  "ignored_other": 1,
+  "tank_empty": 0,
+  "reasons": {
+   "fall": 13,
+   "tank empty": 16,
+   "time limit": 5,
+   "search found no fire": 11
+  },
+  "wall_med": 116.65,
+  "sim_med": 123.82,
+  "on_fire": 0.7818834346729941,
+  "label": "YOLO11n detector (vision/detector.py) with aim/ min_conf 0.3, shipped BHL policy, 6 Nm, real-fire flames"
+ }
+}

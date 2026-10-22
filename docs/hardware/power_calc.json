@@ -1,0 +1,142 @@
+{
+ "motor": {
+  "runs": 40,
+  "falls": 1,
+  "p_batt_walk": 34.23911576222065,
+  "p_batt_walk_max": 41.42662318593642,
+  "p_batt_stand": 21.149058632342772,
+  "p_peak": 190.8110959897593,
+  "p_peak20": 147.7545366513529,
+  "p_regen": 54.01234551530809,
+  "e_regen_mean_w": 1.3536694850813273,
+  "p_drive_peak": 106.67708088401946,
+  "p_drive_regen": 79.17739451848041,
+  "chopper": {
+   "none": {
+    "v_peak": 36.47628598892128,
+    "p_peak": 0.0,
+    "e_event": 0.0,
+    "p_mean": 0.0,
+    "events_s": 0.0
+   },
+   "1 x 2.2 ohm": {
+    "v_peak": 25.563129791420184,
+    "p_peak": 46.879150415216074,
+    "e_event": 2.040399012038006,
+    "p_mean": 1.149466352053783,
+    "events_s": 4.05273822995342
+   },
+   "2 x 2.2 ohm": {
+    "v_peak": 25.531858131964928,
+    "p_peak": 47.198965030663544,
+    "e_event": 2.0406405082581163,
+    "p_mean": 1.1518197121452027,
+    "events_s": 4.05273822995342
+   },
+   "1 x 4.7 ohm": {
+    "v_peak": 25.627975522110052,
+    "p_peak": 44.70927853637284,
+    "e_event": 2.0395116662605424,
+    "p_mean": 1.144287727117577,
+    "events_s": 4.05273822995342
+   },
+   "2 x 4.7 ohm": {
+    "v_peak": 25.567296399203812,
+    "p_peak": 46.79867811405015,
+    "e_event": 2.040355533254465,
+    "p_mean": 1.149155575163152,
+    "events_s": 4.05273822995342
+   },
+   "12 x own resistor, no ramp": {
+    "v_peak": 25.2,
+    "p_peak": 79.17739451848041,
+    "e_event": NaN,
+    "p_mean": 11.347634705658768,
+    "events_s": 0.0
+   }
+  }
+ },
+ "budget": {
+  "loads": [
+   [
+    "5V",
+    "ROCK 3C at full CPU load",
+    1.2,
+    2.0,
+    "estimate 5-6 W (parts.md). Radxa asks for a 5 V 3 A supply"
+   ],
+   [
+    "5V",
+    "2 x CANable V2.0 Pro (isolated)",
+    0.2,
+    0.25,
+    "ASSUMED 100 mA each (isolated DC-DC + STM32G431)"
+   ],
+   [
+    "5V",
+    "Camera B0201",
+    0.2,
+    0.3,
+    "listing: 300 mA max"
+   ],
+   [
+    "5V",
+    "IMU IM10A on UART",
+    0.012,
+    0.02,
+    "listing: 12 mA"
+   ],
+   [
+    "5V",
+    "Bus servo adapter, USB side",
+    0.02,
+    0.05,
+    "ASSUMED"
+   ],
+   [
+    "12V",
+    "Pan-tilt: 2 x ST3215",
+    0.3,
+    5.4,
+    "Waveshare: stall 2.7 A each at 12 V. Typical ASSUMED"
+   ],
+   [
+    "12V",
+    "Push-lock switch lamps, meters",
+    0.05,
+    0.05,
+    "ASSUMED 15-20 mA each"
+   ]
+  ],
+  "i5": [
+   1.632,
+   2.62
+  ],
+  "i12": [
+   0.35,
+   5.45
+  ],
+  "p3s": [
+   20.311666666666667,
+   82.41055555555556
+  ],
+  "i3s_nom": 1.82987987987988,
+  "i3s_peak_low": 7.848624338624339,
+  "hours_3s": 2.6231229999179453
+ },
+ "pump": {
+  "pump": "KLP02",
+  "nozzle_mm": 1.0,
+  "volts": 22.2,
+  "amps": 0.5,
+  "watts": 12.0,
+  "q_lpm": 0.42087205614122924,
+  "v": 9.981909762654118,
+  "spray_min": 1.779537300892905,
+  "usable_l": 0.7489575228068103,
+  "range15": 5.336918414947322,
+  "range15_low": 2.727077893882313
+ },
+ "harness_errors": [],
+ "hours_6s_sim": 5.011411717820789
+}

@@ -1,0 +1,285 @@
+{
+ "policy": "sim/rl/policies/f1_v1.onnx",
+ "status": "tested in simulation (not measured on laptop, not measured on board)",
+ "interface": {
+  "input": "obs float32 [1, 45]: command (3), gyro (3), projected gravity (3), joint pos - default (12), joint vel (12), last action (12)",
+  "output": "actions float32 [1, 12]",
+  "joint_target": "default + 0.25 * action",
+  "default": [
+   0,
+   0,
+   -0.2,
+   0.4,
+   -0.3,
+   0,
+   0,
+   0,
+   -0.2,
+   0.4,
+   -0.3,
+   0
+  ],
+  "joint_order": "left hip roll, hip yaw, hip pitch, knee, ankle pitch, ankle roll, then the right leg",
+  "policy_rate_hz": 25,
+  "pd_kp": 20.0,
+  "pd_kd": 2.0,
+  "torque_limit_nm": 6.0,
+  "knee_max_rad": 1.4,
+  "onnx": "IR 6, opset 11, Gemm + Elu, no observation normaliser (same layout as policy_biped_25hz_a.onnx)"
+ },
+ "framework": {
+  "jax": "0.8.3",
+  "brax": "0.14.2",
+  "mujoco": "3.15.0",
+  "mujoco_mjx": "3.15.0",
+  "playground": "0.2.0",
+  "mjx_impl": "warp",
+  "gpu": "RTX 3090, shared with another training job"
+ },
+ "model": "sim/payload/models/bhl_F1.xml (15.24 kg), training copy built by sim/rl/f1_env.py build_model()",
+ "stages": [
+  {
+   "run": "f1_d",
+   "starts_from": "weights of sim/sim2sim/policy_biped_25hz_a.onnx (BHL, MIT licence)",
+   "note": "stage 1: torque limit fixed at 9 Nm, mild randomisation, no pushes",
+   "env_steps": 121110528,
+   "train_time_s": 2186,
+   "env": {
+    "act_delay_steps": 2,
+    "air_time_threshold": 0.4,
+    "cmd_mix": [
+     0.15,
+     0.3,
+     0.35,
+     0.2
+    ],
+    "cmd_time": [
+     3.0,
+     8.0
+    ],
+    "ctrl_dt": 0.04,
+    "episode_length": 500,
+    "impl": "warp",
+    "naconmax": 131072,
+    "njmax": 96,
+    "noise": 1.0,
+    "obs_delay_steps": 2,
+    "push": {
+     "enable": false,
+     "interval": [
+      6.0,
+      12.0
+     ],
+     "magnitude": [
+      0.1,
+      0.5
+     ]
+    },
+    "recoil": {
+     "force": [
+      0.0,
+      1.5
+     ],
+     "off": [
+      0.5,
+      4.0
+     ],
+     "on": [
+      0.5,
+      3.0
+     ]
+    },
+    "reset_wrench": [
+     0.5,
+     0.5
+    ],
+    "reward": {
+     "action_rate": -0.01,
+     "ang_vel_xy": -0.05,
+     "dof_acc": -1e-06,
+     "dof_pos_limits": -1.0,
+     "feet_air_time": 1.0,
+     "feet_slide": -0.1,
+     "flat_orientation": -2.0,
+     "joint_deviation_ankle_roll": -0.2,
+     "joint_deviation_hip": -0.2,
+     "lin_vel_z": -0.1,
+     "no_step": -2.0,
+     "stand_feet_air": -0.5,
+     "termination": -10.0,
+     "torques": -0.002,
+     "track_ang_vel": 1.0,
+     "track_lin_vel": 2.0
+    },
+    "sim_dt": 0.005,
+    "soft_limit_factor": 0.9,
+    "torque_range": [
+     9.0,
+     9.0
+    ],
+    "tracking_std": 0.25,
+    "zero_offset": 0.03
+   },
+   "ppo": {
+    "num_evals": 12,
+    "num_envs": 8192,
+    "episode_length": 500,
+    "unroll_length": 24,
+    "num_minibatches": 4,
+    "num_updates_per_batch": 5,
+    "learning_rate": 0.0001,
+    "learning_rate_schedule": "ADAPTIVE_KL",
+    "desired_kl": 0.005,
+    "entropy_cost": 0.002,
+    "discounting": 0.99,
+    "gae_lambda": 0.95,
+    "clipping_epsilon": 0.2,
+    "max_grad_norm": 1.0,
+    "vf_loss_coefficient": 1.0,
+    "normalize_observations": false,
+    "reward_scaling": 1.0,
+    "action_repeat": 1,
+    "num_resets_per_eval": 1,
+    "seed": 0,
+    "batch_size": 2048
+   },
+   "net": {
+    "policy_hidden_layer_sizes": [
+     256,
+     128,
+     128
+    ],
+    "value_hidden_layer_sizes": [
+     256,
+     128,
+     128
+    ]
+   },
+   "restore": null,
+   "warm": "policy_biped_25hz_a.onnx",
+   "warm_std": 0.2
+  },
+  {
+   "run": "f1_e",
+   "starts_from": "f1_d",
+   "note": "stage 2: torque limit 6-9 Nm, 0-20 ms command and observation latency, zero error +-0.05 rad, no pushes",
+   "env_steps": 100859904,
+   "train_time_s": 2024,
+   "env": {
+    "act_delay_steps": 4,
+    "air_time_threshold": 0.4,
+    "cmd_mix": [
+     0.15,
+     0.25,
+     0.4,
+     0.2
+    ],
+    "cmd_time": [
+     3.0,
+     8.0
+    ],
+    "ctrl_dt": 0.04,
+    "episode_length": 500,
+    "impl": "warp",
+    "naconmax": 131072,
+    "njmax": 96,
+    "noise": 1.0,
+    "obs_delay_steps": 4,
+    "push": {
+     "enable": false,
+     "interval": [
+      6.0,
+      12.0
+     ],
+     "magnitude": [
+      0.1,
+      0.5
+     ]
+    },
+    "recoil": {
+     "force": [
+      0.0,
+      1.5
+     ],
+     "off": [
+      0.5,
+      4.0
+     ],
+     "on": [
+      0.5,
+      3.0
+     ]
+    },
+    "reset_wrench": [
+     1.0,
+     1.0
+    ],
+    "reward": {
+     "action_rate": -0.01,
+     "ang_vel_xy": -0.05,
+     "dof_acc": -1e-06,
+     "dof_pos_limits": -1.0,
+     "feet_air_time": 1.0,
+     "feet_slide": -0.1,
+     "flat_orientation": -2.0,
+     "joint_deviation_ankle_roll": -0.2,
+     "joint_deviation_hip": -0.2,
+     "lin_vel_z": -0.1,
+     "no_step": -2.0,
+     "stand_feet_air": -1.0,
+     "termination": -10.0,
+     "torques": -0.002,
+     "track_ang_vel": 1.0,
+     "track_lin_vel": 2.0
+    },
+    "sim_dt": 0.005,
+    "soft_limit_factor": 0.9,
+    "torque_range": [
+     6.0,
+     9.0
+    ],
+    "tracking_std": 0.15,
+    "zero_offset": 0.05
+   },
+   "ppo": {
+    "num_evals": 10,
+    "num_envs": 8192,
+    "episode_length": 500,
+    "unroll_length": 24,
+    "num_minibatches": 4,
+    "num_updates_per_batch": 5,
+    "learning_rate": 0.0001,
+    "learning_rate_schedule": "ADAPTIVE_KL",
+    "desired_kl": 0.005,
+    "entropy_cost": 0.002,
+    "discounting": 0.99,
+    "gae_lambda": 0.95,
+    "clipping_epsilon": 0.2,
+    "max_grad_norm": 1.0,
+    "vf_loss_coefficient": 1.0,
+    "normalize_observations": false,
+    "reward_scaling": 1.0,
+    "action_repeat": 1,
+    "num_resets_per_eval": 1,
+    "seed": 0,
+    "batch_size": 2048
+   },
+   "net": {
+    "policy_hidden_layer_sizes": [
+     256,
+     128,
+     128
+    ],
+    "value_hidden_layer_sizes": [
+     256,
+     128,
+     128
+    ]
+   },
+   "restore": "f1_d/params_latest.pkl",
+   "warm": null,
+   "warm_std": 0.3
+  }
+ ],
+ "results": "sim/rl/results/f2_eval_f1_v1.md (evaluated on bhl_F2)"
+}
