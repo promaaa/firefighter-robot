@@ -1,6 +1,8 @@
 # Final design F2
 
-<img src="../cad/final/renders/f2_front.jpg" alt="Final design F2, front" width="320" align="right">
+<p align="center">
+  <img src="../cad/final/renders/f2_front.jpg" alt="Final design F2, front" width="320">
+</p>
 
 Sobang-I is the course Berkeley Humanoid Lite biped with a water system and a fire camera on the torso. Two printed water tanks sit on the side faces of the torso posts. A pan-tilt on top of the torso carries the nozzle and the camera.
 

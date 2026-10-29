@@ -1,12 +1,16 @@
 # Sobang-I · firefighting humanoid
 
-<img src="cad/final/renders/f2_front.jpg" alt="Final design F2" width="300" align="right">
+<p align="center">
+  <img src="cad/final/renders/f2_front.jpg" alt="Final design F2" width="300">
+</p>
 
 Sobang-I finds a small fire with its camera, walks to it and puts it out with a water jet. It is built on the legs of the open-source [Berkeley Humanoid Lite](https://github.com/HybridRobotics/Berkeley-Humanoid-Lite).
 
 Team SOBANG · Seoul National University · ASMR 2026.
 
-| Start here | |
+## Documentation
+
+| Topic | Where |
 |---|---|
 | Plan, milestones, who does what next | [docs/plan](docs/plan/README.md) |
 | Final design and print kit | [docs/design.md](docs/design.md), [cad/final/kit](cad/final/kit/README.md) |
