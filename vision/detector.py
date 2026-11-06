@@ -71,19 +71,27 @@ def decode(outputs, conf, iou, max_det=100):
     return boxes[k], score[k]
 
 
-def undistort(pts, c, iters=10):
+def undistort(pts, c, iters=3):
     """Distorted pixels (N x 2) -> pixels of the ideal pinhole camera with the same fx, fy, cx, cy.
-    c: calibration dict with fx, fy, cx, cy and dist = k1, k2, p1, p2, k3 (OpenCV model). Fixed-point iteration, like
-    cv2.undistortPoints."""
+    c: calibration dict with fx, fy, cx, cy and dist = k1, k2, p1, p2, k3 (OpenCV model). The radial part is inverted with a
+    table, the small tangential part by iteration. A wide lens model stops rising at some radius (B0201: about 390 px from
+    the centre, the far image corners): points beyond it get that radius. A fixed-point iteration diverges there."""
     k1, k2, p1, p2, k3 = c["dist"]
     xd = (pts[:, 0] - c["cx"]) / c["fx"]
     yd = (pts[:, 1] - c["cy"]) / c["fy"]
+    r = np.linspace(0.0, 3.0, 3001)
+    rd = r * (1 + k1 * r ** 2 + k2 * r ** 4 + k3 * r ** 6)
+    falls = np.diff(rd) <= 0
+    n = int(np.argmax(falls)) + 1 if falls.any() else len(r)  # the radial model rises up to r[n - 1]
+    r, rd = r[:n], rd[:n]
     x, y = xd.copy(), yd.copy()
     for _ in range(iters):
         r2 = x * x + y * y
-        rad = 1 + k1 * r2 + k2 * r2 ** 2 + k3 * r2 ** 3
-        x = (xd - (2 * p1 * x * y + p2 * (r2 + 2 * x * x))) / rad
-        y = (yd - (p1 * (r2 + 2 * y * y) + 2 * p2 * x * y)) / rad
+        ax = xd - (2 * p1 * x * y + p2 * (r2 + 2 * x * x))  # = x * radial factor
+        ay = yd - (p1 * (r2 + 2 * y * y) + 2 * p2 * x * y)
+        q = np.hypot(ax, ay)
+        s = np.interp(q, rd, r) / np.maximum(q, 1e-12)
+        x, y = ax * s, ay * s
     return np.stack([x * c["fx"] + c["cx"], y * c["fy"] + c["cy"]], axis=1)
 
 

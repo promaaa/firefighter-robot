@@ -13,6 +13,7 @@ Team SOBANG · Seoul National University · ASMR 2026.
 | Topic | Where |
 |---|---|
 | Plan, milestones, who does what next | [docs/plan](docs/plan/README.md) |
+| Vision tests with the camera and the board | [docs/plan/vision.md](docs/plan/vision.md) |
 | Final design and print kit | [docs/design.md](docs/design.md), [cad/final/kit](cad/final/kit/README.md) |
 | Electrical drawings and power-on tests | [docs/hardware/electrical.md](docs/hardware/electrical.md) |
 | Water system | [docs/hardware/water.md](docs/hardware/water.md) |

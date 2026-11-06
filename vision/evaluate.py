@@ -25,7 +25,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from ultralytics.utils.metrics import compute_ap  # noqa: E402
 
-from detector import FireDetector  # noqa: E402
+from detector import CALIB, FireDetector  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 DATA = Path.home() / "datasets/firefighter/yolo"
@@ -34,10 +34,10 @@ REAL = ("dfire", "fasdd", "barman")
 SOURCES = REAL + ("coco", "synthetic")
 IOUS = np.linspace(0.5, 0.95, 10)
 WIDTH_BINS = [0, 8, 12, 16, 24, 32, 48, 64, 96, 128, 10_000]  # px
-# Camera: Arducam B0201 at 640 x 480. ASSUMED: 120 deg diagonal FOV on the 16:9 sensor (datasheet), 640 x 480 = centre
-# 4:3 crop, pinhole model. Then HFOV = 2 atan(tan(60 deg) * 16 / sqrt(16^2 + 9^2) * 3/4) = 97.1 deg and f = 283 px.
-HFOV_DEG = math.degrees(2 * math.atan(math.tan(math.radians(60)) * 16 / math.hypot(16, 9) * 0.75))
-F_PX = 320 / math.tan(math.radians(HFOV_DEG) / 2)
+# Camera: Arducam B0201 at 640 x 480. f from the lens calibration (calibrate.py, camera_b0201.json: 476 px on 5 Nov 2026).
+# Without that file, the old model value: 120 deg diagonal on the 16:9 sensor, centre 4:3 crop, pinhole -> f = 283 px.
+F_PX = json.loads(CALIB.read_text())["fx"] if CALIB.exists() else 320 / math.tan(math.radians(97.1) / 2)
+HFOV_DEG = math.degrees(2 * math.atan(320 / F_PX))  # pinhole value
 
 
 def load_gt(img, w, h):
@@ -231,10 +231,11 @@ def run(model, name, conf=None):
     out = HERE / "results" / name
     out.mkdir(parents=True, exist_ok=True)
     test = predict(model, name, "test")
-    dups = set((DATA / "test_near_duplicates.txt").read_text().split())
+    tail = lambda p: p[p.rindex("/test/") + 1:]  # noqa: E731  test/<source>/images/<name>.jpg: the list holds the paths of the computer that made it
+    dups = {tail(p) for p in (DATA / "test_near_duplicates.txt").read_text().split()}
     if conf is None:
         conf = best_f1_conf([r for r in predict(model, name, "val") if r["source"] in REAL])
-    by = lambda recs, s, new=False: [r for r in recs if r["source"] in s and not (new and r["file"] in dups)]  # noqa: E731
+    by = lambda recs, s, new=False: [r for r in recs if r["source"] in s and not (new and tail(r["file"]) in dups)]  # noqa: E731
     real, real_new = by(test, REAL), by(test, REAL, True)
     rows, js = [], dict(model=str(model), conf=conf, hfov_deg=HFOV_DEG, f_px=F_PX)
     for label, recs, wr in [("Real test (D-Fire + FASDD + Barman), all images", real, (0, 1e9)),
@@ -281,8 +282,8 @@ def run(model, name, conf=None):
             *[f"| {lo}-{hi if hi < 10_000 else 'max'} | {n} | {r:.3f} | {rl:.3f} | {nn} | {nr:.3f} | {nrl:.3f} |"
               for (lo, hi, n, r), (_, _, _, rl), (_, _, nn, nr), (_, _, _, nrl) in zip(bins, bins_loose, nbins, nbins_loose)], "",
             "Smallest box width from which the recall stays at 90 % (or 50 %) or more for all larger boxes (bins with 20 boxes "
-            f"or more), and the largest distance for a flame of that width. Assumed camera: f = {F_PX:.0f} px at 640 x 480 "
-            f"(HFOV {HFOV_DEG:.1f} deg, pinhole). Distance d = f x flame width / box width.\n",
+            f"or more), and the largest distance for a flame of that width. Camera: f = {F_PX:.0f} px at 640 x 480 "
+            f"({'lens calibration' if CALIB.exists() else 'model value'}, pinhole HFOV {HFOV_DEG:.1f} deg). Distance d = f x flame width / box width.\n",
             "| Test images, criterion | Box width | 10 cm flame | 30 cm flame |", "|---|---|---|---|",
             *[f"| {k} | {w} px | {dist(w, 0.1):.1f} m | {dist(w, 0.3):.1f} m |" if w else f"| {k} | not reached | - | - |"
               for k, w in w90.items()]]
@@ -358,7 +359,8 @@ def deploy_check(models, rknn_preds, conf):
         if not cache.exists():
             cache.parent.mkdir(exist_ok=True)
             np.savez_compressed(cache, recs=np.array(predict_files(m, files), dtype=object))
-        runs.append((Path(m).name, np.load(cache, allow_pickle=True)["recs"].tolist()))
+        label = f"{Path(m).parent.parent.name}_{Path(m).name}" if Path(m).parent.name == "onnx" else Path(m).name  # RUN/onnx/FILE: run name first
+        runs.append((label, np.load(cache, allow_pickle=True)["recs"].tolist()))
     for p in rknn_preds:
         recs = []
         for r in np.load(p, allow_pickle=True)["recs"]:

@@ -60,8 +60,8 @@ CONCEPTS = {
         tilt_limits=(-math.radians(40), math.radians(45)),
         # ESTIMATE: B0201 lens 35 mm right of the nozzle line, 26 mm above the plate (CAM_RISE + 3 mm for the 38 mm board), 16 deg down,
         # 12 mm in front of the nozzle tip, so the nozzle and the plate stay out of the image.
-        # 120 deg diagonal over the 16:9 IMX291 sensor. 640 x 480 is a centre 4:3 crop of it -> 97.1 deg horizontal, f = 283 px
-        # (vision/README.md). Pinhole model: the real M12 lens has barrel distortion. Measure it with vision/calibrate.py.
+        # OLD MODEL VALUE (120 deg diagonal, pinhole): 97.1 deg horizontal, f = 283 px. The lens calibration of 5 Nov 2026 gives
+        # f = 476 px (vision/camera_b0201.json). The robot uses that file (run.py robot_setup). The simulations still use this value.
         cameras={"rgb": dict(mount="tilt", pos=(0.112, -0.035, 0.056), pitch=-math.radians(16), yaw=0.0,
                              K=intrinsics_from_fov(640, 480, 97.1))},
         # Controller defaults for F1 (aim/controller.py ControllerConfig). Jet: gear pump on the 3S pack, 1.0 mm nozzle:

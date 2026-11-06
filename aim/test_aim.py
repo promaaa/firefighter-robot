@@ -325,3 +325,18 @@ def test_no_spray_when_torso_tilted_or_just_started():
     assert not any(pumps[60:82])  # fast change at 6.0 s, then 2 s
     assert any(pumps[84:100])
     assert not any(pumps[100:122])  # large tilt at 10.0 s, then 2 s
+
+
+def test_robot_setup_uses_the_lens_calibration(tmp_path, monkeypatch):
+    """With vision/camera_b0201.json at the camera size, the aim camera is the calibrated pinhole camera of detector.py."""
+    import json
+
+    import run
+    monkeypatch.setattr(run, "CALIB", tmp_path / "none.json")
+    k = run.robot_setup("F2")[0]["cameras"]["rgb"]["K"]
+    assert (k.cx, k.cy) == (320, 240) and abs(k.fx - 476.2) < 0.5  # config.toml hfov_deg 67.8
+    (tmp_path / "c.json").write_text(json.dumps(dict(width=640, height=480, fx=301.0, fy=302.0, cx=318.5, cy=243.0)))
+    monkeypatch.setattr(run, "CALIB", tmp_path / "c.json")
+    k = run.robot_setup("F2")[0]["cameras"]["rgb"]["K"]
+    assert (k.fx, k.fy, k.cx, k.cy) == (301.0, 302.0, 318.5, 243.0)
+    assert CONCEPTS["F2"]["cameras"]["rgb"]["K"].cx == 320  # the shared concept stays as it was

@@ -31,7 +31,11 @@ from detector import FireDetector  # noqa: E402
 W, H, TARGET_FPS = 640, 480, 10.0
 TEST_IMAGE = HERE.parent / "sim/firescenes/out/contact_sheet.jpg"  # in git: a few fire scenes
 MODELS = [("NPU int8 416x320", "fire_yolo11n_416x320_int8.rknn", 0), ("CPU 416x320, 4 threads", "fire_yolo11n_416x320.onnx", 4),
-          ("CPU 416x320, 1 thread", "fire_yolo11n_416x320.onnx", 1)]
+          ("CPU 416x320, 1 thread", "fire_yolo11n_416x320.onnx", 1),
+          ("NPU int8 640x480", "fire_yolo11n_640x480_int8.rknn", 0),  # not in git: copy it from the laptop (docs/plan/vision.md, V6)
+          # p2bench (YOLOv8n-P2 head, more computation): not in git either. cam416 is the same network as the rows above.
+          ("NPU int8 416x320 p2bench", "p2bench_fire_yolo11n_416x320_int8.rknn", 0),
+          ("NPU int8 640x480 p2bench", "p2bench_fire_yolo11n_640x480_int8.rknn", 0)]
 
 
 def frames(args):

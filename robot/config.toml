@@ -19,13 +19,13 @@ concept = "F2"  # final design F2: pan-tilt, camera and nozzle geometry and cont
 [camera]
 detector = ""                  # file with detect(rgb, t). "" = vision/detector.py when it exists, else sim/sim2sim/baseline_detector.py (colour threshold)
 device = "/dev/video-fire"     # udev symlink (robot/setup), Arducam B0201
-usb = ""                       # USB vendor:product of the camera (lsusb), for the /dev/video-fire symlink. Not found in the docs.
+usb = "0c45:0261"              # USB vendor:product of the B0201 (robot/bench.py camera, 5 Nov), for the /dev/video-fire symlink
 input_format = "mjpeg"         # the B0201 gives 30 fps only in MJPEG
 width = 640
 height = 480
 fps = 15
-hfov_deg = 97.1                # B0201: 4:3 crop of the 16:9 sensor, pinhole (vision/README.md). CHECK with vision/calibrate.py.
-latency_s = 0.0                # image age when the frame arrives. Measure it, then the aim delay compensation uses it.
+hfov_deg = 67.8                # B0201 at 640 x 480, pinhole value of the calibrated f = 476 px (vision/camera_b0201.json, 5 Nov). Used only when that file is missing.
+latency_s = 0.25               # image age when the frame arrives, for the aim delay compensation. Screen bench, 5 Nov: screen change to camera frame, median 251 to 259 ms in 3 runs. Upper bound: it also holds the screen delay.
 
 [aim.controller]  # overrides of ControllerConfig fields in aim/controller.py. Empty = the defaults there.
 # v0 = 10.0       # m/s, jet speed. Put the mean v0 of `robot/bench.py pump` here (robot/README.md, bring-up step 8).

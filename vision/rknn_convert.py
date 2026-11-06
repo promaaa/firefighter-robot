@@ -7,7 +7,8 @@
 Run from vision/. uv makes a separate environment from the header above (rknn-toolkit2 needs older numpy and onnx):
   uv run --script rknn_convert.py models/fire_yolo11n_416x320.onnx
 Writes ~/runs/firefighter/vision/rknn/<model>_int8.rknn and <model>_fp16.rknn, and the simulator predictions on a
-fixed subset of the test images (preds_<model>_<type>.npz). Compare them with the ONNX model: evaluate.py --rknn FILE.
+fixed subset of the test images (preds_<model>_<type>.npz). A model in a training run (RUN/onnx/FILE) gets the run name in
+front, as in screen_bench.py: p2bench_fire_yolo11n_416x320. Compare them with the ONNX model: evaluate.py --rknn FILE.
 The simulator runs on the PC. It shows the accuracy of the converted model, not the speed on the board.
 """
 import random
@@ -33,7 +34,7 @@ def uint8_input(f, w, h):
     return np.round(x[0].transpose(1, 2, 0) * 255).astype(np.uint8), s, pad
 
 
-def convert(onnx_path, quant, w, h):
+def convert(onnx_path, name, quant, w, h):
     rknn = RKNN(verbose=False)
     # disable_rules: rknn-toolkit2 2.5.0 fails in this fuse rule on the YOLO11 head (IndexError). Its log suggests this fix.
     rknn.config(mean_values=[[0, 0, 0]], std_values=[[255, 255, 255]], target_platform="rk3566",
@@ -55,7 +56,7 @@ def convert(onnx_path, quant, w, h):
         dataset.write_text("\n".join(lines) + "\n")
     if rknn.build(do_quantization=quant, dataset=str(dataset) if dataset else None) != 0:
         raise SystemExit("build failed")
-    out = OUT / f"{onnx_path.stem}_{'int8' if quant else 'fp16'}.rknn"
+    out = OUT / f"{name}_{'int8' if quant else 'fp16'}.rknn"
     rknn.export_rknn(str(out))
     print("wrote", out, f"{out.stat().st_size / 1e6:.1f} MB")
     return rknn
@@ -63,6 +64,7 @@ def convert(onnx_path, quant, w, h):
 
 def main():
     onnx_path = Path(sys.argv[1]).resolve()
+    name = f"{onnx_path.parent.parent.name}_{onnx_path.stem}" if onnx_path.parent.name == "onnx" else onnx_path.stem
     import onnx
     dims = onnx.load(str(onnx_path)).graph.input[0].type.tensor_type.shape.dim
     h, w = dims[2].dim_value, dims[3].dim_value
@@ -73,7 +75,7 @@ def main():
         imgs = sorted((DATA / "test" / source / "images").glob("*.jpg"))
         files += [(source, f) for f in sorted(rng.sample(imgs, min(n, len(imgs))))]
     for quant in (True, False):
-        rknn = convert(onnx_path, quant, w, h)
+        rknn = convert(onnx_path, name, quant, w, h)
         if rknn.init_runtime() != 0:  # no target: the simulator
             raise SystemExit("init_runtime (simulator) failed")
         recs, t0 = [], time.time()
@@ -85,7 +87,7 @@ def main():
             recs.append(dict(source=source, file=str(f), boxes=b[:100], scores=sc[:100]))
             if k % 100 == 0:
                 print(k, len(files), f"{time.time() - t0:.0f} s", flush=True)
-        dst = OUT / f"preds_{onnx_path.stem}_{'int8' if quant else 'fp16'}.npz"
+        dst = OUT / f"preds_{name}_{'int8' if quant else 'fp16'}.npz"
         np.savez_compressed(dst, recs=np.array(recs, dtype=object))
         print("wrote", dst)
         rknn.release()

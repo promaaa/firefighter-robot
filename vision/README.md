@@ -6,8 +6,8 @@ It finds flames in the 640 x 480 image of the Arducam B0201 camera and gives a b
 
 **Licence:** this folder (code and model files) is AGPL-3.0 ([LICENSE](LICENSE)), because it uses Ultralytics YOLO. The code in the rest of the repository is MIT ([../LICENSE](../LICENSE)).
 
-**Not verified:** No number here comes from the B0201 camera or from the ROCK 3C board. All test images are public photos and video frames. The RKNN model ran only in the Rockchip simulator.
-**Assumed:** The B0201 has a horizontal field of view (HFOV) of 97.1° at 640 x 480 (focal length f = 283 px). `calibrate.py` will measure it.
+**Not verified:** From the B0201 camera, the modes, the frame rates, the lens calibration and the screen bench (fire images on a screen, 5 and 6 Nov) are measured. No real flame is measured yet (test V4). No number comes from the ROCK 3C board. All test images are public photos and video frames. The RKNN models ran only in the Rockchip simulator.
+**Measured on laptop (5 Nov):** at 640 x 480, the B0201 has f = 476 px at the image centre and a real field of view of 80° x 59° (`camera_b0201.json`). The old model value was f = 283 px.
 
 ## Status
 
@@ -19,8 +19,15 @@ It finds flames in the 640 x 480 image of the Arducam B0201 camera and gives a b
 | RKNN INT8 model for the RK3566 NPU (`rknn_convert.py`) | measured on laptop, in the Rockchip simulator |
 | Detector in the F2 mission simulation with real-fire flames ([sim/mission](../sim/mission/README.md)) | tested in simulation |
 | Speed test for the robot board (`board_bench.py`) | built |
-| Camera calibration (`calibrate.py`) | built, tested in simulation (synthetic board images) |
+| B0201 on the laptop: 640 x 480 MJPEG at 14.8 fps (15 fps set), 1920 x 1080 MJPEG at 30 fps (`robot/bench.py camera`, [modes](results/b0201_modes.txt)) | measured on laptop |
+| Camera calibration with a live view (`calibrate.py`) | measured on laptop: f = 476 px, RMS 0.51 px at 640 x 480 (100 views); f = 1084 px, RMS 1.53 px at 1920 x 1080 (50 views) |
+| Screen bench: the B0201 films fire images on a screen (`screen_bench.py`) | built, tested in simulation (ideal camera, `--fake`) |
+| Range test: the B0201 films real candles at measured distances (`range_test.py`) | built, tested in simulation (a video file in place of the camera) |
+| Small-flame variant `small416`: training images scaled by 0.1 to 1.9 (`train.py`, [metrics.md](results/small416/metrics.md)) | measured on laptop: no gain, not used. Ideal-camera screen bench: a candle needs 23 px (old model: 16 px) |
+| Model changes `cam416` (camera-like training images), `p2_416` (YOLOv8n-P2), `y26_416` (YOLO26n), `p2cam416` (P2 + camera-like images), `p2bench` (p2cam416 + B0201 screen bench frames) in `train.py` ([plan](../docs/plan/vision.md#model-changes-after-v2-and-v4)) | measured on laptop (test images and B0201 screen bench frames, 5 and 6 Nov; `p2bench` INT8 in the Rockchip simulator), planned (real candles V4, board) |
 | Detector on the board with the B0201, indoor fire test | planned |
+
+The test stages with the B0201 and the ROCK 3C, their commands and pass criteria: [docs/plan/vision.md](../docs/plan/vision.md).
 
 ## Terms
 
@@ -64,7 +71,7 @@ A control run without our 203 synthetic images (`real416`) gives the same mAP50 
 | `models/fire_yolo11n_416x320.onnx` (FP32, 10.5 MB) | laptop CPU or board CPU, with onnxruntime | the default of `detector.py` |
 | `models/fire_yolo11n_416x320_int8.rknn` (INT8, 3.9 MB) | RK3566 NPU, with rknn-toolkit-lite2 | `FIRE_MODEL=vision/models/fire_yolo11n_416x320_int8.rknn` |
 
-Both files take a 416 x 320 input: a 640 x 480 camera image becomes 416 x 312 with a 4 px grey border. `aim/` then uses only the boxes from its `min_conf` (0.3 for F2, `aim/geometry.py`).
+Both files take a 416 x 320 input: a 640 x 480 camera image becomes 416 x 312 with a 4 px grey border. `aim/` then uses only the boxes from its `min_conf` (0.3 for F2 and F3, `aim/geometry.py`).
 
 ## On the robot board (RK3566)
 
@@ -93,13 +100,15 @@ uv run --with rknn-toolkit-lite2==2.5.0 python vision/board_bench.py
 
 ## Camera (Arducam B0201)
 
-The B0201 has an M12 lens with a 120° diagonal field of view on a 16:9 sensor. The robot reads it at 640 x 480 in MJPEG.
-**Assumed:** 640 x 480 is the centre 4:3 part of the sensor, and the lens is a pinhole lens. Then the HFOV is 97.1° and f = 283 px.
-`robot/config.toml` (`[camera] hfov_deg`) and `aim/geometry.py` use this estimate. The real lens has strong barrel distortion.
+The B0201 has an M12 lens with a 120° diagonal field of view on a 16:9 sensor (datasheet). The robot reads it at 640 x 480 in MJPEG.
+640 x 480 is the centre 1440 x 1080 of the 1920 x 1080 image, scaled by 1/2.25 (measured on laptop, 5 Nov: the edges of both images match). So a flame is 2.25 times wider in pixels at 1920 x 1080.
+The lens calibration of 5 Nov (measured on laptop) gives f = 476 px, cx = 298 px, cy = 223 px and k1 = -0.39 at 640 x 480. The real field of view is 80° x 59°. The pinhole value of f gives 67.8°.
+A board at a measured 400 mm comes out at 401 mm. `detector.py` and `aim/run.py` read `camera_b0201.json`. `robot/config.toml` `hfov_deg = 67.8` is only used when that file is missing.
+`aim/geometry.py` and the simulations still use the old model value f = 283 px.
 `calibrate.py` measures the focal length, the image centre and the distortion with a printed checkerboard. Run it on the laptop, with the camera on USB.
 
-1. Print the OpenCV checkerboard with 10 x 7 squares (9 x 6 inner corners) at 100 % scale. Glue it flat on a rigid board.
-2. Measure one square. The default is 25 mm. For another size, add `--square` with the size in metres.
+1. Print `results/calib_board_9x6_25mm_A4.pdf` on A4 at 100 % scale: 10 x 7 squares (9 x 6 inner corners). Glue it flat on a rigid board. `calibrate.py --board-pdf FILE` writes it again.
+2. Measure the 100 mm line under the board. When it is not 100 mm, measure one square and add `--square` with its size in metres.
 3. Start the live capture. With a folder of 20 to 30 photos of the board, use `--images FOLDER` instead of `--camera`:
 
 ```sh
@@ -108,8 +117,8 @@ uv run --project vision python vision/calibrate.py --camera /dev/video0
 
 4. Move the board slowly: near, far, tilted up to 45°, and in all four corners of the image. The script saves one view each second, 25 views in total.
 5. Read the RMS error at the end. Below 0.5 px is good. Above 0.5 px, repeat with more views near the corners.
-6. Commit the output file `vision/camera_b0201.json`. When it exists, `detector.py` corrects each box for the lens distortion.
-7. Put the new `hfov_deg` into `robot/config.toml` and the new intrinsics into `aim/geometry.py`.
+6. Commit the output file `vision/camera_b0201.json`. When it exists, `detector.py` corrects each box for the lens distortion, and `aim/run.py` uses its fx, fy, cx and cy.
+7. Put the new `hfov_deg` into `robot/config.toml` for the other programs.
 
 ## How to run
 
@@ -132,7 +141,7 @@ Big files stay outside git: the dataset in `~/datasets/firefighter/` and the tra
 
 ## Limits and open points
 
-- **Open:** The robot environment does not install rknn-toolkit-lite2 yet. The camera node needs it to load the RKNN model.
+- `uv sync --extra board` installs rknn-toolkit-lite2 on the board (aarch64 only), so the camera node can load the RKNN model. `robot/setup/install.sh` runs it.
 - **Open:** We still need the calibration of the B0201 and an indoor test with a real tray fire.
 - Small fires are the weak point: under 16 px wide, the recall is under 40 %. A 640 x 480 input finds more of them (recall 0.679 against 0.554 on the 918 test images). It takes about twice the time.
 - Lights can give false boxes: traffic lights, lamps and LED candles, with a confidence of 0.3 to 0.6. A screen that shows a fire also looks like a fire.

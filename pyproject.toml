@@ -18,6 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 board = [
     "gpiod>=2.2",
+    "rknn-toolkit-lite2==2.5.0; platform_machine == 'aarch64'",  # NPU runtime for the .rknn fire detector on the ROCK 3C
 ]
 
 [tool.uv]

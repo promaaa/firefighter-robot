@@ -37,3 +37,47 @@ curl -L --create-dirs -A "firefighter-robot-student-project" -o ~/datasets/firef
 ```sh
 curl -L --create-dirs -A "firefighter-robot-student-project" -o ~/datasets/firefighter/videos/flameless_candle_2_CC0.webm "https://upload.wikimedia.org/wikipedia/commons/0/0b/Flameless_candle_2.webm"
 ```
+
+## Screen bench, image set v2 (5 Nov 2026)
+
+`screen_bench.py run --stimuli v2` uses six more flames from Wikimedia Commons, downloaded on 2026-11-05, with `candle_and_match` and `candle_blow` above.
+Two more files gave the error 429 (too many requests) and are not here: `Corona.Candle.webm` (CC0) and `Water candle experiment.webm` (CC BY 3.0).
+
+| File name used here | Commons file | Author | Licence | Content |
+|---|---|---|---|---|
+| `blue_candle_Jahobr_CC0.webm` | [Blue candle burning.webm](https://commons.wikimedia.org/wiki/File:Blue_candle_burning.webm) | Jahobr | CC0 | Blue candle, close, dark room |
+| `pink_candle_Jahobr_CC0.webm` | [Pink candle burning.webm](https://commons.wikimedia.org/wiki/File:Pink_candle_burning.webm) | Jahobr | CC0 | Pink candle, close, dark room |
+| `white_candle_Jahobr_CC0.webm` | [White candle video.webm](https://commons.wikimedia.org/wiki/File:White_candle_video.webm) | Jahobr | CC0 | White candle, close, dark room |
+| `candle_blown_out_CCBYSA3.ogv` | [CandleGettingBlownOut.ogv](https://commons.wikimedia.org/wiki/File:CandleGettingBlownOut.ogv) | Peter Michner | CC BY-SA 3.0 | Tall candle, then blown out |
+| `candle_shadow_Rhetos_CCBYSA4.webm` | [Kerzen-Schatten-Versuch.webm](https://commons.wikimedia.org/wiki/File:Kerzen-Schatten-Versuch.webm) | Rhetos | CC BY-SA 4.0 | Small candle and a figurine, shadow experiment, dark room |
+| `candle_suffocated_CCBYSA3.ogv` | [ErstickteKerze.ogv](https://commons.wikimedia.org/wiki/File:ErstickteKerze.ogv) | LoKiLeCh | CC BY-SA 3.0 | Tea light on a plate, a glass puts it out |
+| `candle_flame_myanmar_CC0.webm` | [ဖယောင်းတိုင်မီးတောက်.webm](https://commons.wikimedia.org/wiki/File:ဖယောင်းတိုင်မီးတောက်.webm) | စာကလေ | CC0 | Candle flame. Not used: the detector box changes from 28 to 250 px |
+| `candle_smoke_ignition_Rhetos_CCBYSA4.webm` | [Rauchfaden-Zünd-Versuch.webm](https://commons.wikimedia.org/wiki/File:Rauchfaden-Zünd-Versuch.webm) | Rhetos | CC BY-SA 4.0 | Candle lit again through its smoke. Not used: a flame in 1 of 24 frames |
+| `wax_burner_Rhetos_CCBYSA4.webm` | [Wachsbrenner (minimalistisch).webm](https://commons.wikimedia.org/wiki/File:Wachsbrenner_(minimalistisch).webm) | Rhetos | CC BY-SA 4.0 | Wax burner. Not used: text over the image, not a candle |
+| `candle_capacitor_PD.ogv` | [Kerzenflamme im plattenkondensator.ogv](https://commons.wikimedia.org/wiki/File:Kerzenflamme_im_plattenkondensator.ogv) | (see Commons) | Public domain | Candle flame between two plates. Not used: reflections give 3 boxes |
+
+To download the six files of the set, run these commands one at a time. Wait a few seconds between them: Wikimedia answers 429 to fast requests.
+
+```sh
+curl -L --create-dirs -A "firefighter-robot-student-project" -o ~/datasets/firefighter/videos/blue_candle_Jahobr_CC0.webm "https://upload.wikimedia.org/wikipedia/commons/4/4f/Blue_candle_burning.webm"
+```
+
+```sh
+curl -L --create-dirs -A "firefighter-robot-student-project" -o ~/datasets/firefighter/videos/pink_candle_Jahobr_CC0.webm "https://upload.wikimedia.org/wikipedia/commons/6/65/Pink_candle_burning.webm"
+```
+
+```sh
+curl -L --create-dirs -A "firefighter-robot-student-project" -o ~/datasets/firefighter/videos/white_candle_Jahobr_CC0.webm "https://upload.wikimedia.org/wikipedia/commons/1/17/White_candle_video.webm"
+```
+
+```sh
+curl -L --create-dirs -A "firefighter-robot-student-project" -o ~/datasets/firefighter/videos/candle_blown_out_CCBYSA3.ogv "https://upload.wikimedia.org/wikipedia/commons/1/11/CandleGettingBlownOut.ogv"
+```
+
+```sh
+curl -L --create-dirs -A "firefighter-robot-student-project" -o ~/datasets/firefighter/videos/candle_shadow_Rhetos_CCBYSA4.webm "https://upload.wikimedia.org/wikipedia/commons/d/d1/Kerzen-Schatten-Versuch.webm"
+```
+
+```sh
+curl -L --create-dirs -A "firefighter-robot-student-project" -o ~/datasets/firefighter/videos/candle_suffocated_CCBYSA3.ogv "https://upload.wikimedia.org/wikipedia/commons/1/14/ErstickteKerze.ogv"
+```

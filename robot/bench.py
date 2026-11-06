@@ -4,7 +4,8 @@
     uv run python robot/bench.py pantilt                sweep pan and tilt to their limits, measure the position error
     uv run python robot/bench.py pump --seconds 2       timed sprays. You type the jet length: v0 for config.toml.
     uv run python robot/bench.py imu                    IMU rate, gravity at rest, tilt forward and left
-    uv run python robot/bench.py camera                 formats, exposure, frame rate, one snapshot, detections
+    uv run python robot/bench.py camera                 formats, USB id, exposure, frame rate, one snapshot, detections
+    uv run python robot/bench.py camera --device /dev/video0    the same on a laptop (no /dev/video-fire symlink there)
     uv run python robot/bench.py can                    link state, the 12 heartbeats, bus load with policy-like traffic
 
 Add --mock to run a test without hardware (fake drives, mock servos and pump, synthetic camera and IMU).
@@ -287,15 +288,19 @@ def imu(a, ask):
 # ---------------------------------------------------------------- camera
 def camera(a, ask):
     import camera_node as cn
-    dev = CONF["camera"]["device"]
+    dev = a.device or CONF["camera"]["device"]
     if not a.mock:
+        usb = Path(f"/sys/class/video4linux/{Path(dev).resolve().name}/device/..").resolve()
+        usb_id = ":".join((usb / k).read_text().strip() for k in ("idVendor", "idProduct")) if (usb / "idVendor").exists() else None
+        report("PASS" if usb_id and usb_id == CONF["camera"]["usb"] else "WARN", f"camera USB id {usb_id}, config.toml [camera] usb = {CONF['camera']['usb']!r}",
+               "" if usb_id and usb_id == CONF["camera"]["usb"] else f'put usb = "{usb_id}" into config.toml [camera], for the /dev/video-fire symlink on the robot')
         for args in (["--list-formats-ext"], ["--list-ctrls"]):
             out = subprocess.run(["v4l2-ctl", "-d", dev, *args], capture_output=True, text=True)
             print(out.stdout or out.stderr)
         if a.exposure:  # manual exposure (control names of the Linux 6.1 UVC driver)
             subprocess.run(["v4l2-ctl", "-d", dev, "-c", "auto_exposure=1", "-c", f"exposure_time_absolute={a.exposure}"], check=False)
     detect = cn.load_detector(cn.detector_file(source="sim" if a.mock else "real"))
-    frames, closer, _ = cn.open_source("sim" if a.mock else "real", fires=[[1.5, 0.2]] if a.mock else None)
+    frames, closer, _ = cn.open_source("sim" if a.mock else f"real:{dev}", fires=[[1.5, 0.2]] if a.mock else None)
     times, dets, bright, snap = [], 0, [], None
     t_end = time.monotonic() + a.seconds
     try:
@@ -396,6 +401,7 @@ def main(argv=None):
     ap.add_argument("--no-servo", action="store_true", help="pump: do not move the pan-tilt (hold the nozzle by hand or in a clamp)")
     ap.add_argument("--note", default="", help="pump: a note for the data sheet (nozzle, tube length)")
     ap.add_argument("--exposure", type=int, help="camera: manual exposure value (v4l2 exposure_time_absolute)")
+    ap.add_argument("--device", help="camera: V4L2 device (default: config.toml [camera] device). On a laptop: /dev/video0")
     a = ap.parse_args(argv)
     if a.yes and not a.mock:
         ap.error("--yes only with --mock: on the robot, each move needs your answer")

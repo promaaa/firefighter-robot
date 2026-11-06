@@ -22,12 +22,13 @@ from pathlib import Path
 
 from controller import Controller, ControllerConfig
 from detection import FireDetection
-from geometry import CONCEPTS, intrinsics_from_fov
+from geometry import CONCEPTS, Intrinsics, intrinsics_from_fov
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "robot"))
 from robot_config import CONF, HOST  # noqa: E402  ports, camera size and controller overrides: robot/config.toml
 
 _P = CONF["ports"]
+CALIB = Path(__file__).resolve().parents[1] / "vision" / "camera_b0201.json"  # vision/calibrate.py. detector.py undistorts to it
 DET_PORT = _P["detections"]  # detections in
 CMD_PORTS = [_P["actuator_cmd"], _P["walk_cmd"], _P["supervisor"]]  # commands out: actuator driver (pan, tilt, pump_on), walking bridge (vx, yaw_rate), robot/launch.py
 FEEDBACK_PORT = _P["feedback"]  # measured pan and tilt from actuators/actuator_node.py (with --feedback)
@@ -130,12 +131,18 @@ def _drain(sock):
 
 
 def robot_setup(concept):
-    """The concept geometry with the camera size and field of view of config.toml [camera], and the ControllerConfig
-    with the overrides of config.toml [aim.controller] (for example v0 from the jet test)."""
+    """The concept geometry with the camera of config.toml [camera], and the ControllerConfig with the overrides of
+    config.toml [aim.controller] (for example v0 from the jet test). The camera: fx, fy, cx, cy of the lens calibration
+    (CALIB) when it has the camera size, because vision/detector.py then gives pixels of that pinhole camera. Else
+    config.toml hfov_deg, with the image centre."""
     cam = CONF["camera"]
     cfg = dict(CONCEPTS[concept], cameras={k: dict(v) for k, v in CONCEPTS[concept]["cameras"].items()})
     if "rgb" in cfg["cameras"]:
-        cfg["cameras"]["rgb"]["K"] = intrinsics_from_fov(cam["width"], cam["height"], cam["hfov_deg"])
+        c = json.loads(CALIB.read_text()) if CALIB.exists() else {}
+        if (c.get("width"), c.get("height")) == (cam["width"], cam["height"]):
+            cfg["cameras"]["rgb"]["K"] = Intrinsics(c["fx"], c["fy"], c["cx"], c["cy"], c["width"], c["height"])
+        else:
+            cfg["cameras"]["rgb"]["K"] = intrinsics_from_fov(cam["width"], cam["height"], cam["hfov_deg"])
     return cfg, ControllerConfig(**{**cfg.get("controller", {}), **CONF.get("aim", {}).get("controller", {})})
 
 

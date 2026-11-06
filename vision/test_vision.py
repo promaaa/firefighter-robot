@@ -66,6 +66,19 @@ def test_undistort_round_trip():
     assert np.abs(detector.undistort(dist, CALIB) - ideal).max() < 0.05
 
 
+def test_undistort_wide_lens_corners():
+    """B0201 lens (5 Nov calibration): exact where the model rises, and a finite point at the far corners."""
+    c = dict(fx=476.1, fy=477.3, cx=298.3, cy=222.6, dist=[-0.392, 0.184, 0.001, 0.001, -0.048])
+    K = np.array([[c["fx"], 0, c["cx"]], [0, c["fy"], c["cy"]], [0, 0, 1]])
+    xy = np.random.default_rng(1).uniform(-1.0, 1.0, (500, 2)) * [1.2, 0.9]  # up to 50 deg from the axis
+    ideal = xy * [c["fx"], c["fy"]] + [c["cx"], c["cy"]]
+    dist = cv2.projectPoints(np.c_[xy, np.ones(len(xy))], np.zeros(3), np.zeros(3), K, np.array(c["dist"]))[0][:, 0]
+    inside = np.hypot(*xy.T) < 1.2  # the radial model of this lens rises up to an ideal radius of about 1.3
+    assert np.abs(detector.undistort(dist[inside], c) - ideal[inside]).max() < 0.05
+    corners = detector.undistort(np.array([[0.0, 0.0], [639.0, 0.0], [0.0, 479.0], [639.0, 479.0]]), c)
+    assert np.isfinite(corners).all() and (np.abs(corners - [c["cx"], c["cy"]]) < 3 * c["fx"]).all()
+
+
 def test_calibrate_synthetic_views():
     """Render the board in 15 poses with a known camera and lens distortion. calibrate() must find them again."""
     K = np.array([[CALIB["fx"], 0, CALIB["cx"]], [0, CALIB["fy"], CALIB["cy"]], [0, 0, 1]])
@@ -92,3 +105,109 @@ def test_calibrate_synthetic_views():
     assert abs(r["fx"] / CALIB["fx"] - 1) < 0.02 and abs(r["cx"] - CALIB["cx"]) < 5
     assert abs(r["dist"][0] - CALIB["dist"][0]) < 0.05
     json.dumps(r)
+
+
+def test_find_corners_full_hd():
+    """1920 x 1080: find() searches on a 640 px wide copy and refines on the full image. Each corner within 0.2 px of the truth."""
+    sq = 90
+    board = np.kron((np.indices((7, 10)).sum(0) % 2).astype(np.uint8) * 255, np.ones((sq, sq), np.uint8))
+    board = cv2.copyMakeBorder(board, sq, sq, sq, sq, cv2.BORDER_CONSTANT, value=255)
+    h, w = board.shape
+    Hm = cv2.getPerspectiveTransform(np.float32([[0, 0], [w, 0], [w, h], [0, h]]), np.float32([[500, 200], [1500, 260], [1450, 900], [450, 820]]))
+    img = cv2.GaussianBlur(cv2.warpPerspective(board, Hm, (1920, 1080), borderValue=128), (0, 0), 1.0)
+    inner = np.stack(np.meshgrid(np.arange(1, 10), np.arange(1, 7)), -1).reshape(-1, 1, 2) * sq + sq - 0.5
+    truth = cv2.perspectiveTransform(inner.astype(np.float32), Hm).reshape(-1, 2)
+    c = calibrate.find(img, 9, 6, fast=True).reshape(-1, 2)
+    assert len(c) == 54 and np.linalg.norm(c[:, None] - truth[None], axis=2).min(1).max() < 0.2
+
+
+def test_camera_like_in_the_training_pipeline(tmp_path):
+    """train.CameraLike changes the image and keeps the boxes. add_camera_like puts it into an Ultralytics dataset, also
+    after close_mosaic, and the dataset still gives samples."""
+    import random
+
+    import pytest
+    pytest.importorskip("ultralytics")  # the training env only: the CI fire-detector job does not install it
+    import train
+    from ultralytics.cfg import get_cfg
+    from ultralytics.data import YOLODataset
+    random.seed(0)
+    np.random.seed(0)
+    img = np.full((64, 64, 3), 120, np.uint8)
+    img[20:30, 20:30] = 250
+    out = train.CameraLike(p=1.0)(dict(img=img.copy(), instances="boxes stay"))
+    assert out["img"].shape == img.shape and out["img"].dtype == np.uint8 and out["instances"] == "boxes stay"
+    assert np.abs(out["img"].astype(int) - img).mean() > 1
+    (tmp_path / "images").mkdir()
+    (tmp_path / "labels").mkdir()
+    for i in range(4):
+        cv2.imwrite(str(tmp_path / f"images/{i}.jpg"), img)
+        (tmp_path / f"labels/{i}.txt").write_text("0 0.39 0.39 0.16 0.16\n")
+    hyp = get_cfg()
+    ds = YOLODataset(img_path=str(tmp_path / "images"), imgsz=64, augment=True, hyp=hyp, data={"names": {0: "fire"}, "channels": 3})
+    train.add_camera_like(ds, hyp)
+    assert any(isinstance(x, train.CameraLike) for x in ds.transforms.transforms)
+    ds.close_mosaic(hyp)
+    assert any(isinstance(x, train.CameraLike) for x in ds.transforms.transforms)
+    assert ds[0]["img"].shape[0] == 3
+
+
+def test_screen_bench_true_box():
+    """screen_bench: the white box shows where the source flame lands, at the aimed width, also near the screen edges.
+    A bright spot in every frame (the mouse pointer, a wall seen after the camera turned) does not change the true box."""
+    import screen_bench as sb
+    from PIL import Image, ImageDraw
+
+    class Spot(sb.FakeRig):
+        def look(self, img, settle=0.0, n=1):
+            f = super().look(img, settle, n)[0].copy()
+            f[230:240, 600:620] = 250
+            return [f] * n
+
+    rig, box = Spot(), [100, 50, 120, 90]  # source flame 20 px wide, 40 px high
+    src = Image.new("RGB", (300, 200))
+    ImageDraw.Draw(src).rectangle([100, 50, 119, 89], fill="white")
+    for width, gx, gy in [(4, 0.5, 0.5), (16, 0.1, 0.9), (45, 0.9, 0.1)]:
+        tb = sb.target_box(box, width, gx, gy, sb.K_FAKE, rig.size)
+        t = sb.true_box(rig, tb, 0.0)
+        assert sb.bright_box(sb.grey(rig.look(sb.mask(tb, rig.size))[0]))[2] >= 620  # the old way: the spot is in the box
+        assert abs(t[2] - t[0] - width) <= 1 and abs(t[3] - t[1] - 2 * width) <= 1
+        seen = sb.bright_box(sb.grey(sb.FakeRig().look(sb.compose(src, box, tb, rig.size))[0]))
+        assert max(abs(a - b) for a, b in zip(t, seen)) <= 1, (t, seen)
+
+
+def test_range_test_truth_and_tiles(tmp_path):
+    """range_test: the true box is the bright blob inside the label box, and tiled boxes come back in image pixels."""
+    import range_test as rt
+    f = np.full((480, 640, 3), 40, np.uint8)
+    f[200:212, 300:304] = 250  # a small flame, 4 x 12 px
+    assert rt.truth(f, [290, 190, 315, 220]) == [300, 200, 304, 212]
+    assert rt.truth(f, None) is None
+    fake_model(tmp_path / "m.onnx", [[208, 164, 26, 52]], [0.8])  # box (300, 206.2)-(340, 286.2) in a 640 x 480 tile
+    b, s = rt.tiled(detector.FireDetector(tmp_path / "m.onnx", calib=None), np.zeros((1080, 1920, 3), np.uint8), 0.5)
+    assert len(b) == 9 and np.allclose(s, 0.8)
+    assert sorted({round(x) for x in b[:, 0]}) == [300, 940, 1580] and sorted({round(y) for y in b[:, 1]}) == [206, 506, 806]
+
+
+def test_bench_compare_rates_and_videos(tmp_path):
+    """bench_compare.rates: a fire frame counts when a box at the model threshold touches the true box; videos filters the trials."""
+    import bench_compare as bc
+    stim = [dict(video="a_candle.webm"), dict(video="b_led.webm"), dict(video="c_candle.webm")]
+    (tmp_path / "setup.json").write_text(json.dumps(dict(stimuli=stim)))
+    trials = [dict(stim=0, fire=True, ok=True, truth=[100, 100, 110, 130], frames=["f0"]),   # 10 px, found
+              dict(stim=0, fire=True, ok=True, truth=[200, 100, 220, 140], frames=["f1"]),   # 20 px, box too weak
+              dict(stim=2, fire=True, ok=True, truth=[300, 100, 312, 130], frames=["f2"]),   # 12 px, box elsewhere
+              dict(stim=1, fire=False, ok=True, truth=[50, 50, 60, 70], frames=["f3"]),      # LED candle with a box
+              dict(stim=2, fire=True, ok=False, truth=None, frames=["f4"])]                  # not valid: skipped
+    (tmp_path / "trials.jsonl").write_text("".join(json.dumps(t) + "\n" for t in trials))
+    det = {"f0": [[101, 99, 111, 128, 0.9]], "f1": [[200, 100, 220, 140, 0.05]], "f2": [[400, 100, 410, 130, 0.9]],
+           "f3": [[0, 0, 5, 5, 0.9]], "f4": []}
+    (tmp_path / "det_x_fire_yolo11n_640x480.json").write_text(json.dumps(det))
+    r = bc.rates(tmp_path, "x_fire_yolo11n_640x480")  # unknown run x: threshold CONF
+    assert r[(8, 16)] == 0.5 and r[(16, 32)] == 0.0 and r[(4, 8)] is None and r["led"] == 1.0
+    r = bc.rates(tmp_path, "x_fire_yolo11n_640x480", videos=["a_"])
+    assert r[(8, 16)] == 1.0 and r["led"] is None
+    assert len(bc.trials(tmp_path, ["c_", "b_"])) == 2
+    assert bc.led_threshold(tmp_path, "x_fire_yolo11n_640x480", 0.0) > 0.9  # no LED frame may keep its 0.9 box
+    assert bc.rates(tmp_path, "x_fire_yolo11n_640x480", conf=0.91)[(8, 16)] == 0.0
+    assert bc.led_threshold(tmp_path, "x_fire_yolo11n_640x480", 1.0) == 0.1

@@ -3,6 +3,7 @@
 | Topic | Document |
 |---|---|
 | Plan, milestones, workstreams and next tasks | [plan/README.md](plan/README.md) |
+| Vision on the real camera and board: test stages, commands, pass criteria | [plan/vision.md](plan/vision.md) |
 | Final design F2: layout, mass, print kit | [design.md](design.md) |
 | Electrical design and drawings SOB-E | [hardware/electrical.md](hardware/electrical.md) |
 | Water system: tanks, pump, nozzle, bench tests | [hardware/water.md](hardware/water.md) |

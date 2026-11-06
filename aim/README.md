@@ -121,7 +121,7 @@ Pan turns about z, positive to the left. Tilt is the elevation, positive up.
 | Tilt pivot, on the pan axis | (-0.038, 0, 0.854) m: 63 mm above the torso top |
 | Nozzle exit, tilting frame | (0.100, 0, 0.040) m, estimate. At pan 0 and tilt 0: (0.062, 0, 0.894) m |
 | Camera (Arducam B0201), tilting frame | (0.112, -0.035, 0.056) m, 16 deg below the nozzle axis, estimate |
-| Camera model | pinhole, 640 × 480, 97.1 deg horizontal field of view (f = 283 px) |
+| Camera model | pinhole, 640 × 480. Robot: the lens calibration `vision/camera_b0201.json` (f = 476 px, 5 Nov). Simulations: the old model value, 97.1 deg horizontal field of view (f = 283 px) |
 | Pan and tilt limits | -90 to 90 deg, -40 to 45 deg |
 
 The pose can carry the torso roll and pitch from the IMU. The base rotation is `Rz(yaw) Ry(pitch) Rx(roll)`, and positive pitch tips the front down.
