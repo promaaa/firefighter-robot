@@ -24,7 +24,8 @@ input_format = "mjpeg"         # the B0201 gives 30 fps only in MJPEG
 width = 640
 height = 480
 fps = 15
-hfov_deg = 67.8                # B0201 at 640 x 480, pinhole value of the calibrated f = 476 px (vision/camera_b0201.json, 5 Nov). Used only when that file is missing.
+calib = "vision/camera_b0201.json"  # lens calibration (vision/calibrate.py): aim/ uses its fx, fy, cx, cy. "" = hfov_deg (mission simulation)
+hfov_deg = 67.8                # B0201 at 640 x 480, pinhole value of the calibrated f = 476 px (vision/camera_b0201.json, 5 Nov). Used only without calib.
 latency_s = 0.25               # image age when the frame arrives, for the aim delay compensation. Screen bench, 5 Nov: screen change to camera frame, median 251 to 259 ms in 3 runs. Upper bound: it also holds the screen delay.
 
 [aim.controller]  # overrides of ControllerConfig fields in aim/controller.py. Empty = the defaults there.

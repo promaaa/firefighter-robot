@@ -28,7 +28,8 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "robot"))
 from robot_config import CONF, HOST  # noqa: E402  ports, camera size and controller overrides: robot/config.toml
 
 _P = CONF["ports"]
-CALIB = Path(__file__).resolve().parents[1] / "vision" / "camera_b0201.json"  # vision/calibrate.py. detector.py undistorts to it
+_CAL = CONF["camera"].get("calib", "vision/camera_b0201.json")  # vision/calibrate.py. detector.py undistorts to it
+CALIB = Path(__file__).resolve().parents[1] / _CAL if _CAL else None  # None: config.toml calib = "" (mission simulation)
 DET_PORT = _P["detections"]  # detections in
 CMD_PORTS = [_P["actuator_cmd"], _P["walk_cmd"], _P["supervisor"]]  # commands out: actuator driver (pan, tilt, pump_on), walking bridge (vx, yaw_rate), robot/launch.py
 FEEDBACK_PORT = _P["feedback"]  # measured pan and tilt from actuators/actuator_node.py (with --feedback)
@@ -133,12 +134,12 @@ def _drain(sock):
 def robot_setup(concept):
     """The concept geometry with the camera of config.toml [camera], and the ControllerConfig with the overrides of
     config.toml [aim.controller] (for example v0 from the jet test). The camera: fx, fy, cx, cy of the lens calibration
-    (CALIB) when it has the camera size, because vision/detector.py then gives pixels of that pinhole camera. Else
-    config.toml hfov_deg, with the image centre."""
+    (CALIB, config.toml [camera] calib) when it has the camera size, because vision/detector.py then gives pixels of that
+    pinhole camera. Else config.toml hfov_deg, with the image centre."""
     cam = CONF["camera"]
     cfg = dict(CONCEPTS[concept], cameras={k: dict(v) for k, v in CONCEPTS[concept]["cameras"].items()})
     if "rgb" in cfg["cameras"]:
-        c = json.loads(CALIB.read_text()) if CALIB.exists() else {}
+        c = json.loads(CALIB.read_text()) if CALIB and CALIB.exists() else {}
         if (c.get("width"), c.get("height")) == (cam["width"], cam["height"]):
             cfg["cameras"]["rgb"]["K"] = Intrinsics(c["fx"], c["fy"], c["cx"], c["cy"], c["width"], c["height"])
         else:

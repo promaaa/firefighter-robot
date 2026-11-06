@@ -60,10 +60,11 @@ CONCEPTS = {
         tilt_limits=(-math.radians(40), math.radians(45)),
         # ESTIMATE: B0201 lens 35 mm right of the nozzle line, 26 mm above the plate (CAM_RISE + 3 mm for the 38 mm board), 16 deg down,
         # 12 mm in front of the nozzle tip, so the nozzle and the plate stay out of the image.
-        # OLD MODEL VALUE (120 deg diagonal, pinhole): 97.1 deg horizontal, f = 283 px. The lens calibration of 5 Nov 2026 gives
-        # f = 476 px (vision/camera_b0201.json). The robot uses that file (run.py robot_setup). The simulations still use this value.
+        # Pinhole camera of the lens calibration of 5 Nov 2026 (vision/camera_b0201.json): f = 476 px at 640 x 480, 67.8 deg
+        # horizontal, image centre. The real lens sees 80 deg with its barrel distortion. The robot uses the file itself, with its
+        # measured centre (run.py robot_setup). Until 6 Nov: the old model value 97.1 deg (f = 283 px).
         cameras={"rgb": dict(mount="tilt", pos=(0.112, -0.035, 0.056), pitch=-math.radians(16), yaw=0.0,
-                             K=intrinsics_from_fov(640, 480, 97.1))},
+                             K=intrinsics_from_fov(640, 480, 67.8))},
         # Controller defaults for F1 (aim/controller.py ControllerConfig). Jet: gear pump on the 3S pack, 1.0 mm nozzle:
         # 0.40 L/min, v0 = 9.5 m/s at 11.1 V, drag 0.11 1/m (model, not measured). v0 follows the 3S voltage:
         # v0 = 9.5 (V / 11.1)^0.73 m/s. aim/run.py sets cc.v0 from the servo voltage reading (F1 only).

@@ -17,7 +17,7 @@ The same random missions run for each configuration, so we can compare detectors
 | Robot | `sim/payload/models/bhl_F2.xml` (15.99 kg, tanks full). The ST3215 pan-tilt is two joints with position servos: 4.7 rad/s, 2.9 Nm, pan ±90°, tilt −40° to +45°. |
 | Walking | Any ONNX policy with the BHL interface (45 inputs, 12 outputs, 25 Hz). Default: the shipped BHL policy. |
 | Leg drives | Case 7 of `sim/sim2sim/hw_risks.py`: PD in the drive (K 20, D 2), 6 Nm limit, joint zero error ±2°, 10 ms command latency. Physics at 2 kHz. |
-| Camera | Arducam B0201 on the tilt head: 640 × 480, 97.1° horizontal, pinhole model, 10 Hz. Mounting error ±1°, exposure ±15 %, pixel noise. |
+| Camera | Arducam B0201 on the tilt head: 640 × 480, f = 476 px (67.8° horizontal, the lens calibration of 5 Nov), pinhole model, 10 Hz. The real lens sees 80° with its distortion. Mounting error ±1°, exposure ±15 %, pixel noise. |
 | Fire images | Animated flame sprites, drawn as billboards with a depth test against the MuJoCo depth buffer, plus a glow. `--flames real` uses clips of real fires (`sprites/`). |
 | Detector | Any module with `detect(rgb, t)`. Default: `sim/sim2sim/baseline_detector.py` (colour threshold). `oracle` gives the true flame boxes. 100 ms delay. |
 | Mission logic | `aim/controller.py` with the F2 values of `aim/geometry.py` |
@@ -92,15 +92,23 @@ Status: tested in simulation. 50 missions per configuration, real-fire flames, s
 
 | Configuration | Detector | Success | Fires out | Falls | Missions with a false spray | Water on a fire |
 |---|---|---|---|---|---|---|
-| `f2_kit_real` | colour baseline | 3 of 50 | 27 of 102 | 19 | 16 | 54 % |
-| `f2_real_conf03` | YOLO11n (`vision/detector.py`), `min_conf` 0.3 | 5 of 50 | 25 of 102 | 13 | 0 | 78 % |
+| `f2_kit_real` | colour baseline | 5 of 50 | 32 of 102 | 20 | 22 | 48 % |
+| `f2_real_conf03` | YOLO11n (`vision/detector.py`), `min_conf` 0.3 | 8 of 50 | 37 of 102 | 12 | 0 | 77 % |
 
 Success means every fire out, with no fall or ABORT.
 
-1. Falls and an empty tank end most missions. Falls end 13 to 19 missions of 50, an empty tank 16 to 17.
+1. Falls and an empty tank end most missions. Falls end 12 to 20 missions of 50, an empty tank 15 to 19.
 2. No tray of 17.5 cm or more goes out (0 of 20 in both configurations). The jet and the fire model limit the tray size.
-3. The YOLO detector gives no false spray in 50 missions, and 78 % of its water hits a fire. The colour baseline sprays at red objects and lamps.
-4. The YOLO detector finds a visible fire in 40 to 67 % of the images at 1 to 4 m. The median largest detection distance is 3.1 m.
+3. The YOLO detector gives no false spray in 50 missions, and 77 % of its water hits a fire. The colour baseline sprays at red objects and lamps.
+4. The YOLO detector finds a visible fire in 53 to 75 % of the images at 1 to 5 m. The median largest detection distance is 3.3 m.
+
+Camera change on 6 Nov: these results use f = 476 px, the lens calibration of the B0201.
+Before, the simulation used the old model value f = 283 px, so the flames were 1.7 times too small.
+A control run on 6 Nov used the same code and the same 50 missions with f = 283 px.
+In it, the YOLO detector put out 25 fires of 102 instead of 37, and it found a fire at 4 to 5 m in 26 % of the images instead of 75 %.
+Mission by mission, f = 476 px puts out more fires in 12 missions and fewer in 1 (sign test, p = 0.003).
+The colour baseline also sees the red objects larger: 22 missions with a false spray instead of 16.
+The simulated camera has no lens distortion, so it sees 67.8° instead of the real 80°.
 
 ![Fire position error, detection rate and time to put out all fires](results/fig_campaign.png)
 
@@ -114,9 +122,9 @@ Figure 2. The first 16 missions of `f2_kit_real`: room, furniture, fires (green:
 
 `sprite_check.py` renders 2840 robot camera images of one fire at 1 to 5 m. Full tables: [results/sprite_check.md](results/sprite_check.md).
 
-- With real-fire flames, YOLO11n at its own threshold (0.28) finds 54 to 69 % of the flames that are 12 to 32 px wide.
+- With real-fire flames, YOLO11n at its own threshold (0.28) finds 46 to 74 % of the flames that are 12 to 32 px wide. At 3 to 5 m, it finds 34 to 91 % of the flames of the 10 to 30 cm trays (0 to 80 % with the old f = 283 px).
 - At a threshold of 0.5, it finds far fewer. The F2 controller uses `min_conf` 0.3 (`aim/geometry.py`).
-- YOLO11n gives no false detection in these images. The colour baseline gives 0.33 per image.
+- YOLO11n gives no false detection in these images. The colour baseline gives 0.63 per image.
 
 ![Detection rate against distance](results/fig_sprite_check.png)
 

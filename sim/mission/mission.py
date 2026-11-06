@@ -58,7 +58,7 @@ PIVOT_H = 0.64 + world.DZ  # m, aim/geometry.BASE_Z in the base frame: aim/ tilt
 def load_detector(path):
     mod = load_module(path, "detector")
     if hasattr(mod, "FireDetector"):  # vision/detector.py: one onnxruntime thread, so parallel missions do not fight for cores
-        mod._detector = mod.FireDetector(threads=1)
+        mod._detector = mod.FireDetector(threads=1, calib=None)  # rendered images have no lens distortion to correct
     return mod.detect
 
 
@@ -505,11 +505,13 @@ class SilLink:
         self.fb_rx.setblocking(False)
         self.tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         RUNS.mkdir(parents=True, exist_ok=True)
-        # robot/config.toml for this test: concept F2, the B0201 field of view, the ST3215 speed (270 deg/s), and the jet speed
-        # at this mission's battery voltage (the mock servos report no voltage, the real ones do: aim/run.py reads it)
+        # robot/config.toml for this test: concept F2, the field of view of the rendered camera (no lens calibration: the
+        # rendered images are pinhole images), the ST3215 speed (270 deg/s), and the jet speed at this mission's battery
+        # voltage (the mock servos report no voltage, the real ones do: aim/run.py reads it)
         import re
         text = (ROOT / "robot" / "config.toml").read_text()
         text = re.sub(r'(?m)^concept = "\w+"', f'concept = "{spec.get("robot", "F2")}"', text)
+        text = re.sub(r'(?m)^calib = ".*?"', 'calib = ""', text)
         text = re.sub(r"(?m)^hfov_deg = [0-9.]+", f"hfov_deg = {math.degrees(2 * math.atan(world.W / 2 / world.K.fx)):.3f}", text)
         text = re.sub(r"(?m)^max_speed_dps = [0-9.]+", "max_speed_dps = 270", text)
         text = re.sub(r"(?m)^\[aim\.controller\].*$", f"[aim.controller]\nv0 = {world.jet_v0(spec):.4f}", text)

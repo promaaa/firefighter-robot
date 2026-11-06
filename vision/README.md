@@ -50,8 +50,8 @@ Sources: [metrics.md](results/all416/metrics.md) ([JSON](results/all416/metrics.
 | Small fires (box under 32 px wide), all real test images | recall 0.472, mAP50 0.529 |
 | False alarms: 330 COCO photos of fire-like things, no fire | a false box in 2.1 % of the images |
 | False alarms: 4 738 new-scene images without fire | a false box in 7.4 % of the images |
-| Box width for 50 % recall (IoU 0.25), distance d = f × flame width / box width, f = 283 px | 16 px: a 10 cm flame up to 1.8 m, a 30 cm flame up to 5.3 m |
-| Box width for 90 % recall (IoU 0.25) | 64 px: a 10 cm flame up to 0.4 m, a 30 cm flame up to 1.3 m |
+| Box width for 50 % recall (IoU 0.25), distance d = f × flame width / box width, f = 476 px | 16 px: a 10 cm flame up to 3.0 m, a 30 cm flame up to 8.9 m |
+| Box width for 90 % recall (IoU 0.25) | 64 px: a 10 cm flame up to 0.7 m, a 30 cm flame up to 2.2 m |
 | Laptop CPU (i7-9700, onnxruntime), `detect()` on a 640 x 480 frame | 12.0 ms with 4 threads (83 frames per second), 26.7 ms with 1 thread |
 | RKNN INT8 in the Rockchip simulator, 918 test images | mAP50 0.775 (ONNX on the same images: 0.816). Small-fire recall 0.500 (ONNX: 0.554) |
 | 6 real videos (Wikimedia Commons, [timeline](results/video_timeline.png)) | frames with a box: candle 95 %, burning bottle 100 %, far campfire 58 %. LED candles (no fire): weak false boxes, up to 0.36 |
@@ -104,7 +104,7 @@ The B0201 has an M12 lens with a 120° diagonal field of view on a 16:9 sensor (
 640 x 480 is the centre 1440 x 1080 of the 1920 x 1080 image, scaled by 1/2.25 (measured on laptop, 5 Nov: the edges of both images match). So a flame is 2.25 times wider in pixels at 1920 x 1080.
 The lens calibration of 5 Nov (measured on laptop) gives f = 476 px, cx = 298 px, cy = 223 px and k1 = -0.39 at 640 x 480. The real field of view is 80° x 59°. The pinhole value of f gives 67.8°.
 A board at a measured 400 mm comes out at 401 mm. `detector.py` and `aim/run.py` read `camera_b0201.json`. `robot/config.toml` `hfov_deg = 67.8` is only used when that file is missing.
-`aim/geometry.py` and the simulations still use the old model value f = 283 px.
+Since 6 Nov, `aim/geometry.py` and the mission simulation use a pinhole camera with f = 476 px and the image centre. They have no lens distortion, so they see 67.8° instead of 80°.
 `calibrate.py` measures the focal length, the image centre and the distortion with a printed checkerboard. Run it on the laptop, with the camera on USB.
 
 1. Print `results/calib_board_9x6_25mm_A4.pdf` on A4 at 100 % scale: 10 x 7 squares (9 x 6 inner corners). Glue it flat on a rigid board. `calibrate.py --board-pdf FILE` writes it again.
