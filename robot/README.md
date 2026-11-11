@@ -33,7 +33,7 @@ All ports, devices, pins, ids and limits are in one file: `config.toml`. The por
 |---|---|---|---|
 | `actuators/actuator_node.py` | mock servos, mock pump pin (a file) | ST3215 servos, pump GPIO | as `--bench` |
 | `robot/camera_node.py` | synthetic camera, colour-threshold detector | Arducam B0201, `vision/detector.py` | as `--bench` |
-| `legs/run_policy.py --udp` | fake CAN bus with the MuJoCo biped | not started | 12 drives and the IMU |
+| `legs/run_policy.py --udp` | fake CAN bus with the ASMR 2026 MuJoCo model | not started | 12 drives and the IMU |
 | `aim/run.py F2 --feedback` | walks | `--no-walk`: stands still | walks |
 
 - `--sim --bench` runs the fake world without legs.
@@ -48,7 +48,7 @@ All ports, devices, pins, ids and limits are in one file: `config.toml`. The por
 
 Run all commands from the repository root. Do steps 1 to 3 once.
 
-1. Install the environment with `uv sync`.
+1. Install the laptop development environment with `uv sync --extra sim --extra dev`.
 2. Fetch the Berkeley Humanoid Lite (BHL) model files into `third_party/`:
 
 ```sh
@@ -58,26 +58,26 @@ bash scripts/fetch_bhl_assets.sh
 3. Build the MuJoCo models. The fake legs use `sim/payload/models/bhl_biped.xml`.
 
 ```sh
-uv run python sim/payload/models.py
+uv run --extra sim --extra dev python sim/payload/models.py
 ```
 
 4. Run the fast tests of `aim/`, `actuators/` and `robot/` (about 30 s):
 
 ```sh
-uv run pytest -q
+uv run --extra sim --extra dev pytest -q
 ```
 
-5. Run the leg tests on the fake CAN bus with `uv run pytest legs -q`.
+5. Run the leg tests on the fake CAN bus with `uv run --extra sim --extra dev pytest legs -q`.
 6. Start the whole robot in simulation. Press Ctrl+C to stop it.
 
 ```sh
-uv run python robot/launch.py --sim
+uv run --extra sim --extra dev python robot/launch.py --sim
 ```
 
 7. Run the software-in-the-loop test (about 1.5 min):
 
 ```sh
-uv run python robot/sil.py
+uv run --extra sim --extra dev python robot/sil.py
 ```
 
 Result on 2026-10-22: 66 tests pass in step 4, 6 tests in step 5, and 3 of 3 scenarios in step 7.
@@ -100,7 +100,7 @@ The detector is the colour-threshold baseline. The full table is in [results/sil
 
 - From a stand, the fake legs did not start to walk at 0.25 m/s. They moved 0.02 m in 9.5 s.
 - So the walking bridge sends a start kick of 0.45 m/s for 0.5 s (`config.toml` `[walk]`). With the kick, the legs started in 7 of 7 runs.
-- The fake legs use the bare BHL biped, the drive model of `legs/fake_bus.py` and the knee limit 1.4 rad. The real robot can differ.
+- The fake legs use the ASMR 2026 model with its nominal 1 kg payload, the drive model of `legs/fake_bus.py` and the knee limit 1.4 rad. The real robot can differ.
 
 ## Bring-up on the robot
 
@@ -138,6 +138,7 @@ bash robot/setup/install.sh
 ```
 
 - The script installs the system packages and uv, then runs `uv sync --extra board`.
+- The board extra installs locomotion and mission runtime dependencies without MuJoCo, plotting tools or pytest. `--sim` is only needed for fake hardware and simulation.
 - It writes the udev rules, the CAN service and the robot service (`robot@bench`, `robot@full`, not enabled).
 - It sets the CPU governor to performance, enables the IMU UART overlay and boots to text mode.
 - It changes only what is different, so you can run it again at any time. Reboot after it with `sudo reboot`.
@@ -167,7 +168,7 @@ bash robot/setup/install.sh --list-usb
 Correct each FAIL with its hint and run the check again. A WARN line is information.
 
 ```sh
-uv run python robot/bench.py preflight
+.venv/bin/python robot/bench.py preflight
 ```
 
 ### 5. Legs
@@ -176,18 +177,18 @@ Do [legs/README.md](../legs/README.md) parts A to D: CAN adapters, wiring, drive
 Then check both CAN buses. The robot hangs from the gantry and the motor power is on. This test only reads, so no motor moves.
 
 ```sh
-uv run python robot/bench.py can
+.venv/bin/python robot/bench.py can
 ```
 
 All 12 drives must send heartbeats. Each bus must be ERROR-ACTIVE, and all encoder replies must arrive.
 
 ### 6. IMU
 
-Set the IMU once to 200 Hz and 230400 baud with `uv run python legs/imu.py --setup` (legs/README.md part E).
+Set the IMU once to 200 Hz and 230400 baud with `.venv/bin/python legs/imu.py --setup` (legs/README.md part E).
 Then check the rate and the axes. The test asks you to tilt the robot forward, then to its left.
 
 ```sh
-uv run python robot/bench.py imu
+.venv/bin/python robot/bench.py imu
 ```
 
 When a sign is wrong, edit `IMU_TO_BODY` in `legs/imu.py`.
@@ -199,7 +200,7 @@ Set the servo ids and the zeros ([actuators/README.md](../actuators/README.md), 
 **CAUTION:** The next command moves the nozzle to each limit at 30 deg/s. Keep your hands and the cables away.
 
 ```sh
-uv run python robot/bench.py pantilt
+.venv/bin/python robot/bench.py pantilt
 ```
 
 When the nozzle or the hose touches something at a limit, make that limit smaller in `config.toml`. Each static error must be 2 deg or less.
@@ -213,7 +214,7 @@ Measure the height of the nozzle exit above the floor, and use it in place of 0.
 **CAUTION:** The next command sprays water 3 times for 2 s. Keep the electronics dry. Point the nozzle away from people.
 
 ```sh
-uv run python robot/bench.py pump --height 0.95 --seconds 2 --runs 3
+.venv/bin/python robot/bench.py pump --height 0.95 --seconds 2 --runs 3
 ```
 
 - After each spray, type the distance from the point below the nozzle exit to the point where the jet hits the floor.
@@ -226,7 +227,7 @@ uv run python robot/bench.py pump --height 0.95 --seconds 2 --runs 3
 The test prints the formats and the controls, then measures the frame rate and the brightness for 5 s.
 
 ```sh
-uv run python robot/bench.py camera
+.venv/bin/python robot/bench.py camera
 ```
 
 - Run it again with a lighter flame in view. The number of detections must grow.
@@ -236,7 +237,27 @@ uv run python robot/bench.py camera
 
 ### 10. Walking on the gantry
 
-Do legs/README.md part F: the policy torque limit, then the policy with the robot on the gantry.
+Complete legs/README.md parts A to F first. From the repository root, check the software artifacts without opening CAN:
+
+```sh
+.venv/bin/python legs/run_policy.py --check
+```
+
+Then confirm the configured drives and run the baseline policy with zero velocity. The robot must be supported by the gantry:
+
+```sh
+.venv/bin/python legs/bringup.py scan
+.venv/bin/python legs/run_policy.py --vx 0 --vy 0 --yaw 0 --seconds 20
+```
+
+The policy program enables the drives and ramps to its standing pose. Lower the robot until both feet rest on the floor,
+then press Enter to start the 20-second policy run. Ctrl+C requests the damping-then-idle stop.
+
+To start the complete camera, aiming, actuator and locomotion pipeline after their individual bring-up checks:
+
+```sh
+.venv/bin/python robot/launch.py --full
+```
 
 ### 11. Full power-on and e-stop test
 
@@ -248,7 +269,7 @@ Run the preflight check (step 4): all lines must be PASS.
 **CAUTION:** The next command moves the 12 joints to the default pose in 2 s, and the pan-tilt to its search pose.
 
 ```sh
-uv run python robot/launch.py --full
+.venv/bin/python robot/launch.py --full
 ```
 
 - When `launch.py` asks for Enter, do not press it. Press the e-stop.
@@ -264,7 +285,7 @@ Hang the robot from the gantry with the legs straight down (legs/README.md, "Zer
 **CAUTION:** The next command moves the legs, then the robot walks and sprays. Keep the e-stop in your hand and 2 m free around the robot.
 
 ```sh
-uv run python robot/launch.py --full
+.venv/bin/python robot/launch.py --full
 ```
 
 - When the robot stands on the floor with slack chains, press Enter.

@@ -43,8 +43,13 @@ def test_imu_frames():
     bad = bytes.fromhex("55 52 0100 0000 0000 0000 00")   # wrong checksum: skipped
     vals, rest = imu.parse(b"\x00\x13" + bad + gyro + quat + gyro[:5])
     assert vals == {0x52: (16384, 0, -16384, 0), 0x59: (32767, 0, 0, 0)} and rest == gyro[:5]
-    q, w = imu.to_body(vals[0x59], vals[0x52])
+    q, w = imu.to_body(vals[0x59], vals[0x52], np.eye(3))
     assert q == approx([1, 0, 0, 0], abs=1e-4) and w == approx([np.radians(1000), 0, -np.radians(1000)])
+    # Default ASMR mount: IMU X points along body Y; the base yaw is -90 degrees
+    # when the raw IMU reports identity in the world frame.
+    q, w = imu.to_body(vals[0x59], vals[0x52])
+    assert q == approx([np.sqrt(0.5), 0, 0, -np.sqrt(0.5)], abs=1e-4)
+    assert w == approx([0, np.radians(1000), -np.radians(1000)])
     turned = np.diag([-1.0, -1.0, 1.0])  # IMU mounted with its X mark backward
     assert imu.to_body(vals[0x59], vals[0x52], turned)[1] == approx([-np.radians(1000), 0, -np.radians(1000)])
 

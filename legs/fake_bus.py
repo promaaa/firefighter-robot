@@ -1,11 +1,12 @@
 """Fake XDrive MINI drives, for tests without hardware.
 
 12 virtual drives answer on python-can 'virtual' buses (in-process: no sudo, no vcan) with the same CANSimple
-messages as the real drives. They move the MuJoCo BHL biped of sim/sim2sim in real time. Each drive runs the
+messages as the real drives. They move the ASMR 2026 biped of sim/sim2sim in real time. Each drive runs the
 ODrive cascade of controller.cpp (position -> velocity -> torque, then the torque limit) at the physics rate (2 kHz).
 
 The robot starts in ZERO_POSE and hangs from a hoist (a weld of the torso to the world).
-A jig holds the joints still until the first drive enters closed loop. ready() lets go of the hoist.
+A jig holds the joints still until the first drive enters closed loop. ready() lowers the hoist to the standing
+height before releasing it, like the operator lowering the supported robot onto its feet.
 """
 import struct
 import threading
@@ -16,29 +17,40 @@ import mujoco
 import numpy as np
 
 import odrive_can as oc
-from robot import JOINTS, N, NAMES, TORQUE_CONSTANT, TORQUE_LIMIT, TURNS_PER_RAD, ZERO_POSE, drive_settings, sim2sim
+from robot import (BHL_TO_ASMR, JOINTS, N, NAMES, TORQUE_CONSTANT, TORQUE_LIMIT, TURNS_PER_RAD, ZERO_POSE,
+                   drive_settings)
+from sim.sim2sim import run as sim2sim
 
 VBUS = 24.0         # V
 VEL_LIMIT = 50.0    # turns/s, course xdrive_config.txt
-HOIST_Z = 0.02      # m, torso height on the hoist above the standing height: the feet are off the floor
+HOIST_Z = 0.02      # m, base-frame height on the hoist; the standing base height comes from the ASMR model
 WATCHDOG = 1.0      # s, axis0.config.watchdog_timeout of bringup.py settings
 
 
 class FakeRobot:
     def __init__(self, torque_limit=TORQUE_LIMIT, seed=0):
-        spec = mujoco.MjSpec.from_file(str(sim2sim.MODELS / "bhl_biped.xml"))
+        spec = mujoco.MjSpec.from_file(str(sim2sim.MODEL_PATH))
+        sim2sim.add_payload(spec)
         hoist = spec.add_equality()
         hoist.type, hoist.objtype, hoist.name1 = mujoco.mjtEq.mjEQ_WELD, mujoco.mjtObj.mjOBJ_BODY, "base"
         hoist.data = [0, 0, 0, 0, 0, -HOIST_Z, 1, 0, 0, 0, 1]  # pose of the world in the torso frame
         m = self.m = spec.compile()
         m.opt.timestep = sim2sim.PHYSICS_DT
+        sim2sim.configure_torque_actuators(m, torque_limit)
         d = self.d = mujoco.MjData(m)
         assert [m.joint(f"leg_{n}_joint").qposadr[0] for n in NAMES] == list(range(7, 19))
-        assert np.allclose(m.jnt_range[1:13], [j[4:6] for j in JOINTS], atol=1e-4), "JOINTS limits differ from the model"
+        assert np.allclose(m.jnt_range[1:13], sim2sim.JOINT_LIMITS, atol=1e-4), "fake model limits differ from ASMR MJCF"
         d.qpos[2], d.qpos[7:19] = HOIST_Z, ZERO_POSE
         mujoco.mj_forward(m, d)
 
-        self.sign = np.array([j[3] for j in JOINTS], float)
+        base_rot = d.xmat[m.body("base").id].reshape(3, 3)
+        imu_rot = d.site("imu").xmat.reshape(3, 3)
+        self.imu_rotation_in_base = base_rot.T @ imu_rot
+        imu_quat_in_base = np.zeros(4)
+        mujoco.mju_mat2Quat(imu_quat_in_base, self.imu_rotation_in_base.flatten())
+        self.base_quat_in_imu = imu_quat_in_base * [1.0, -1.0, -1.0, -1.0]
+
+        self.sign = np.array([j[3] for j in JOINTS], float) * BHL_TO_ASMR
         s = [drive_settings(j[2], torque_limit) for j in JOINTS]
         self.pos_gain, self.vel_gain = np.array([x["pos_gain"] for x in s]), np.array([x["vel_gain"] for x in s])
         self.tmax = np.array([x["current_lim"] * TORQUE_CONSTANT[j[2]] for x, j in zip(s, JOINTS)])  # Nm at the motor
@@ -62,9 +74,11 @@ class FakeRobot:
         return [oc.Bus(c, "virtual") for c in self.channels]
 
     def imu(self):
-        """Quaternion [w, x, y, z] and angular velocity (rad/s) of the torso, like the real IMU."""
+        """Quaternion and angular velocity transformed from the MJCF IMU frame into the base frame."""
         with self.lock:
-            return self.d.sensor("imu_quat").data.copy(), self.d.sensor("imu_gyro").data.copy()
+            quat = sim2sim.quat_mul(self.d.sensor("imu_quat").data.copy(), self.base_quat_in_imu)
+            gyro = self.imu_rotation_in_base @ self.d.sensor("imu_gyro").data.copy()
+            return quat, gyro
 
     def truth(self):
         """True torso pose for the fake camera: position (x, y, z), quaternion [w, x, y, z] in the world, and the
@@ -77,11 +91,20 @@ class FakeRobot:
             return float(self.d.site("imu").xpos[2])
 
     def ready(self):
-        """Plays the operator: lower the robot (let go of the hoist), say "on the ground" 1 s later."""
-        if self.hoisted:
-            self.hoisted, self.t_release = False, time.monotonic()
-            self.d.eq_active[0] = 0
-        return time.monotonic() - self.t_release > 1.0
+        """Lower the supported robot over one second, then release it as the policy starts."""
+        if not self.hoisted:
+            return True
+        now = time.monotonic()
+        if self.t_release is None:
+            self.t_release = now
+        fraction = min(1.0, now - self.t_release)
+        height = HOIST_Z + fraction * (sim2sim.DEFAULT_BASE_POSITION[2] - HOIST_Z)
+        with self.lock:
+            self.m.eq_data[0, 5] = -height
+            if fraction >= 1.0:
+                self.d.eq_active[0] = 0
+                self.hoisted = False
+        return not self.hoisted
 
     def close(self):
         self.running = False
