@@ -14,49 +14,65 @@ import odrive_can as oc
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 sys.path.append(str(ROOT / "robot"))
-from sim.sim2sim import run as sim2sim  # noqa: E402  (policy observation, default pose, policy file, MuJoCo model)
+from source.robot_models.robots import asmr2026_policy as policy_model  # noqa: E402
 from robot_config import CONF  # noqa: E402  robot/config.toml
 
-N = 15.0                         # cycloidal gear ratio. BHL robot_configuration.backup.json: "gear_ratio": -15.0
+N = 15.0                         # ASMR course gear ratio, defined positive at the joint-side model
 TURNS_PER_RAD = N / (2 * np.pi)  # motor turns per joint radian
-KP, KD = sim2sim.KP, sim2sim.KD  # 20 Nm/rad, 2 Nm*s/rad: the gains of the policy training
-TORQUE_LIMIT = 6.0               # Nm at the joint: the training effort limit (BHL configs/policy_biped_25hz_a.yaml)
+KP, KD = policy_model.KP, policy_model.KD  # per-joint gains from the ASMR MJCF position actuators
+TORQUE_LIMIT = 6.0               # Nm at the joint: conservative bring-up limit; raise only after hardware checks
 TORQUE_CONSTANT = {"6512": 0.067, "5010": 0.0836}  # Nm/A at the motor, course xdrive_config.txt
 LIMIT_MARGIN = 0.2               # rad. A joint this far beyond a limit has a wrong zero (a wrong zero is 0.42 rad).
 RATE = 25.0                      # Hz, the policy rate. All host loops use it.
 CHANNELS = tuple(CONF["can"]["channels"])  # robot/config.toml. robot/setup names the adapters by USB serial number.
 CALIB = Path(__file__).with_name("calibration.json")
 
-# Joint map, in the policy order (sim/sim2sim/run.py JOINTS). EDIT THE NODE COLUMN after `bringup.py scan`.
-# node:  CAN node id. Default = BHL and 2025 course plan (Lowlevel robot/humanoid.py:50-62): left leg
-#        1,3,5,7,11,13 on can0, right leg 2,4,6,8,12,14 on can1. The ids are unique, so the code finds
-#        each drive on its bus by its heartbeat. A swap of can0 and can1 at boot does no harm.
-# motor: BHL robot_configuration.backup.json:412-903 gives torque constant 0.0919 (MAD M6C12 = "6512") for
-#        hip roll, hip yaw, hip pitch and knee, and 0.1176 (MAD 5010) for both ankle joints.
-# sign:  +1 when the joint angle grows with the motor turns. Start value = -(BHL joint_axis_directions,
-#        Lowlevel robot/humanoid.py:84-91), because the BHL gear ratio is -15. CHECK on the robot (README).
-# lo, hi: joint limits (rad), BHL URDF berkeley_humanoid_lite_biped.urdf, the same as the MuJoCo ranges.
-# stop:  the stop that `bringup.py calibrate` uses, as in BHL scripts/calibrate_joints.py:29-43,53-65.
+# Model-coordinate conversion. This is separate from `sign`, which maps encoder turns
+# to the existing low-level joint coordinates. The policy sees ASMR coordinates.
+BHL_TO_ASMR = policy_model.BHL_TO_ASMR.astype(float)
+
+
+def to_asmr(q):
+    """Convert joint positions or velocities from the low-level/BHL convention to ASMR coordinates."""
+    return policy_model.to_asmr(q)
+
+
+def to_hardware_coordinates(q):
+    """Convert ASMR joint positions or velocities to the convention used by the drive map."""
+    return policy_model.to_drive_coordinates(q)
+
+
+# The encoder signs remain the existing low-level map. The ASMR/BHL model-axis
+# conversion is applied at the policy boundary, not folded into motor calibration.
+_DRIVES = [
+    # joint name        node motor  encoder sign  calibration stop
+    ("left_hip_roll",     1, "6512", +1, "lo"),
+    ("left_hip_yaw",      3, "6512", -1, "hi"),
+    ("left_hip_pitch",    5, "6512", +1, "hi"),
+    ("left_knee_pitch",   7, "6512", +1, "lo"),
+    ("left_ankle_pitch", 11, "5010", +1, "lo"),
+    ("left_ankle_roll",  13, "5010", -1, "lo"),
+    ("right_hip_roll",    2, "6512", +1, "hi"),
+    ("right_hip_yaw",     4, "6512", -1, "lo"),
+    ("right_hip_pitch",   6, "6512", -1, "hi"),
+    ("right_knee_pitch",  8, "6512", -1, "lo"),
+    ("right_ankle_pitch", 12, "5010", -1, "lo"),
+    ("right_ankle_roll", 14, "5010", -1, "hi"),
+]
+
+_HARDWARE_LIMITS = policy_model.JOINT_LIMITS.copy()
+_flipped_axes = BHL_TO_ASMR < 0
+_HARDWARE_LIMITS[_flipped_axes] = -policy_model.JOINT_LIMITS[_flipped_axes, ::-1]
 JOINTS = [
-    # name              node motor  sign  lo         hi        stop
-    ("left_hip_roll",     1, "6512", +1, -0.174533, 1.570800, "lo"),
-    ("left_hip_yaw",      3, "6512", -1, -0.981748, 0.589049, "hi"),
-    ("left_hip_pitch",    5, "6512", +1, -1.898050, 0.981748, "hi"),
-    ("left_knee_pitch",   7, "6512", +1, 0.000000, 2.443460, "lo"),
-    ("left_ankle_pitch", 11, "5010", +1, -0.785398, 0.785398, "lo"),
-    ("left_ankle_roll",  13, "5010", -1, -0.261799, 0.261799, "lo"),
-    ("right_hip_roll",    2, "6512", +1, -1.570800, 0.174533, "hi"),
-    ("right_hip_yaw",     4, "6512", -1, -0.589049, 0.981748, "lo"),
-    ("right_hip_pitch",   6, "6512", -1, -1.898050, 0.981748, "hi"),
-    ("right_knee_pitch",  8, "6512", -1, 0.000000, 2.443460, "lo"),
-    ("right_ankle_pitch", 12, "5010", -1, -0.785398, 0.785398, "lo"),
-    ("right_ankle_roll", 14, "5010", -1, -0.261799, 0.261799, "hi"),
+    (name, node, motor, sign, *_HARDWARE_LIMITS[i], stop)
+    for i, (name, node, motor, sign, stop) in enumerate(_DRIVES)
 ]
 NAMES = [j[0] for j in JOINTS]
-assert [f"leg_{n}_joint" for n in NAMES] == sim2sim.JOINTS, "JOINTS must be in the policy order"
+assert [f"leg_{n}_joint" for n in NAMES] == list(policy_model.LEG_JOINTS), "JOINTS must be in the policy order"
 LO, HI = np.array([j[4] for j in JOINTS]), np.array([j[5] for j in JOINTS])
 STOP = np.where([j[6] == "lo" for j in JOINTS], LO, HI)  # calibration stop angles (rad)
-DEFAULT = sim2sim.DEFAULT.astype(float)  # stand pose of the policy
+POLICY_DEFAULT = policy_model.DEFAULT.astype(float)
+DEFAULT = to_hardware_coordinates(POLICY_DEFAULT)  # stand pose in the drive-map convention
 ZERO_POSE = np.zeros(12)  # zeroing pose: legs hang straight down, knees straight, soles flat, toes forward
 
 
@@ -82,8 +98,9 @@ def current_limit(joint_torque, torque_constant):
 
 
 def drive_settings(motor, torque_limit=TORQUE_LIMIT):
-    """Drive values for K = 20, D = 2 at the joint and a joint torque limit (Nm). Set them with odrivetool."""
-    pos_gain, vel_gain = drive_gains(KP, KD)
+    """Drive settings using the ASMR gains for this motor group and the requested joint torque limit."""
+    i = next(i for i, joint in enumerate(JOINTS) if joint[2] == motor)
+    pos_gain, vel_gain = drive_gains(KP[i], KD[i])
     return dict(pos_gain=pos_gain, vel_gain=vel_gain, current_lim=current_limit(torque_limit, TORQUE_CONSTANT[motor]))
 
 

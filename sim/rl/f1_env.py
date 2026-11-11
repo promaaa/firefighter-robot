@@ -401,7 +401,7 @@ def check():
   sim/sim2sim/run.py."""
   import sys
   sys.path.insert(0, str(HERE.parent / "sim2sim"))
-  import run as s2s  # sim/sim2sim/run.py, read-only
+  import bhl_legacy as s2s  # legacy BHL simulator shared helpers
   m = build_model()
   ref = mujoco.MjModel.from_xml_path(str(F1_XML))
   assert abs(m.body_subtreemass[1] - ref.body_subtreemass[1]) < 1e-6, f"mass differs from {F1_XML.name}"

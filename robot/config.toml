@@ -71,7 +71,7 @@ start_kick_vx = 0.45  # m/s: from a stand, send at least this for start_kick_s, 
 start_kick_s = 0.5    # s. 0 = no kick. Fake legs: 0.25 m/s from a stand moved 0.02 m in 9.5 s, with the kick 1.4 to 2.4 m.
 
 [legs]
-policy = "sim/sim2sim/policy_biped_25hz_a.onnx"  # the shipped BHL policy. Our policy: "sim/rl/policies/f1_v1.onnx" (legs/README.md, part F)
+policy = "policies/baseline/policy.onnx"  # ASMR 2026 baseline network; 45 observations, 12 joint actions
 knee_max = 1.4    # rad, knee target limit. F2: at full knee range the foot touches a tank.
 max_run_s = 600   # the policy stops after this time, as a last limit for one mission
 

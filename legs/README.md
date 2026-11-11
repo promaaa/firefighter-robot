@@ -1,10 +1,10 @@
 # Legs: bring-up kit for the 12 leg drives
 
-This folder runs the 12 leg actuators of the Berkeley Humanoid Lite (BHL) over two CAN buses.
+This folder runs the 12 leg actuators using the ASMR 2026 Humanoid v1 joint model over two CAN buses.
 It has the joint map, the CAN driver, the zeroing, the checks for the first day, the IMU reader and the policy loop.
 Each script also runs on 12 fake drives that move the MuJoCo biped, so you can try everything on a laptop.
 
-**Status:** built, tested in simulation (`uv run pytest legs -q`: 6 tests pass on 2026-10-22). Nothing is measured on board yet.
+**Status:** the ASMR baseline network and joint model are wired into the runtime. The ASMR fake-drive path and physical robot have not been verified on the onboard computer or hardware.
 
 ## Words used here
 
@@ -12,7 +12,7 @@ Each script also runs on 12 fake drives that move the MuJoCo biped, so you can t
 - **Node id:** the CAN address of a drive (`axis0.config.can_node_id`).
 - **Heartbeat:** the CAN message that each drive sends every 100 ms with its error and its state.
 - **Zero pose:** all joints at 0 rad. The legs hang straight down, the knees are straight, the soles are flat, the toes point forward.
-- **Default pose:** the stand pose of the policy. Hip pitch -0.2 rad, knee 0.4 rad, ankle pitch -0.3 rad, all others 0.
+- **Default pose:** the ASMR baseline stand pose from `source/robot_models/robots/asmr2026_model.py`.
 - **K and D:** the joint stiffness (N·m/rad) and damping (N·m·s/rad) of the drive position control.
 - **Damping mode:** K = 0 and D = 2 N·m·s/rad. The legs fold slowly and do not hold a pose.
 
@@ -25,7 +25,7 @@ Each script also runs on 12 fake drives that move the MuJoCo biped, so you can t
 | `run_policy.py` | The walking policy at 25 Hz over CAN. `--udp` takes the walk command from `aim/run.py`. |
 | `imu.py` | IM10A IMU reader, and its one-time setup |
 | `odrive_can.py` | CAN messages of the drive firmware (ODrive v0.5.1), and a small bus class over python-can |
-| `fake_bus.py` | 12 fake drives that move the MuJoCo biped. Each script takes `--fake`. |
+| `fake_bus.py` | 12 fake drives that move the ASMR MuJoCo model. Each script takes `--fake`. |
 | `test_legs.py` | The tests |
 | `calibration.json` | Written by `bringup.py calibrate`. It belongs to one robot. |
 
@@ -34,15 +34,16 @@ Each script also runs on 12 fake drives that move the MuJoCo biped, so you can t
 The fake drives need the MuJoCo models: do steps 1 to 3 of [robot/README.md](../robot/README.md), "Run it on a laptop", once.
 
 ```sh
-uv run pytest legs -q
+uv sync --extra sim --extra dev
+uv run --extra sim --extra dev pytest legs -q
 ```
 
 ```sh
-uv run python legs/run_policy.py --fake --seconds 10 --knee-max 1.4
+uv run --extra sim --extra dev python legs/run_policy.py --fake --seconds 10 --knee-max 1.4
 ```
 
 ```sh
-uv run python legs/bringup.py --fake scan
+uv run --extra sim --extra dev python legs/bringup.py --fake scan
 ```
 
 The fake drives answer the same CAN messages on the in-process "virtual" bus of python-can. They need no sudo and no vcan.
@@ -51,26 +52,24 @@ The fake robot starts in the zero pose on a hoist.
 
 ## Joint map (`JOINTS` in `robot.py`)
 
-| Joint | Node | Motor | Sign | When the angle grows | Calibration stop |
+| Joint | Node | Motor | Encoder sign | When the drive-map angle grows | Calibration stop |
 | --- | --- | --- | --- | --- | --- |
-| left_hip_roll | 1 | 6512 | +1 | the foot swings to the robot's left | foot inward, -10° |
-| left_hip_yaw | 3 | 6512 | -1 | the foot swings left, the toes turn right | toes inward, +33.75° |
-| left_hip_pitch | 5 | 6512 | +1 | the foot swings backward | leg backward, +56.25° |
-| left_knee_pitch | 7 | 6512 | +1 | the knee bends | knee fully straight, 0° |
-| left_ankle_pitch | 11 | 5010 | +1 | the toes go down | toes up, -45° |
-| left_ankle_roll | 13 | 5010 | -1 | the left edge of the sole goes up | outer edge of the sole down, -15° |
-| right_hip_roll | 2 | 6512 | +1 | the foot swings to the robot's left | foot inward, +10° |
-| right_hip_yaw | 4 | 6512 | -1 | the foot swings left, the toes turn right | toes inward, -33.75° |
-| right_hip_pitch | 6 | 6512 | -1 | the foot swings backward | leg backward, +56.25° |
-| right_knee_pitch | 8 | 6512 | -1 | the knee bends | knee fully straight, 0° |
-| right_ankle_pitch | 12 | 5010 | -1 | the toes go down | toes up, -45° |
-| right_ankle_roll | 14 | 5010 | -1 | the left edge of the sole goes up | outer edge of the sole down, +15° |
+| left_hip_roll | 1 | 6512 | +1 | the foot swings to the robot's left | foot inward |
+| left_hip_yaw | 3 | 6512 | -1 | the foot swings left and the toes turn right | toes inward |
+| left_hip_pitch | 5 | 6512 | +1 | the foot swings backward | leg backward |
+| left_knee_pitch | 7 | 6512 | +1 | the knee bends | knee fully straight |
+| left_ankle_pitch | 11 | 5010 | +1 | the toes go down | toes up |
+| left_ankle_roll | 13 | 5010 | -1 | the left edge of the sole goes up | outer edge of the sole down |
+| right_hip_roll | 2 | 6512 | +1 | the foot swings to the robot's left | foot inward |
+| right_hip_yaw | 4 | 6512 | -1 | the foot swings left and the toes turn right | toes inward |
+| right_hip_pitch | 6 | 6512 | -1 | the foot swings backward | leg backward |
+| right_knee_pitch | 8 | 6512 | -1 | the knee bends | knee fully straight |
+| right_ankle_pitch | 12 | 5010 | -1 | the toes go down | toes up |
+| right_ankle_roll | 14 | 5010 | -1 | the left edge of the sole goes up | outer edge of the sole down |
 
-- The order is the policy order. The node ids are the ids of BHL and of the 2025 course code. The lab tapes "CAN 11" and "CAN 12" fit them.
-- Motor 6512 (MAD M6C12) drives the hip and knee joints, and motor 5010 drives both ankle joints, as in BHL.
-- The signs are start values: the opposite of the BHL `joint_axis_directions`, because the BHL gear ratio is -15. Step 15 checks them.
-- The limits and the stops come from the BHL URDF and the BHL calibration script.
-- Sources: [Berkeley-Humanoid-Lite](https://github.com/HybridRobotics/Berkeley-Humanoid-Lite/tree/984741a3623c93b0583ccfdc479f1f8b1c4d900e) and [Berkeley-Humanoid-Lite-Lowlevel](https://github.com/HybridRobotics/Berkeley-Humanoid-Lite-Lowlevel/tree/652777cc7c49884e7cd7ddfada758dc1979bf627).
+- The existing encoder signs, node IDs and motor groups are retained. Check the actual encoder direction and node assignment with the gantry bring-up before moving the robot.
+- The ASMR model's axis reversals are applied as a separate coordinate conversion at the policy input/output boundary. They do not change the encoder signs.
+- Numeric joint limits come from the ASMR MJCF and are converted into the drive-map coordinates. The calibration stop is the physical stop listed in the final column.
 
 ## Bring-up checklist
 
@@ -104,7 +103,7 @@ Do the same for `can1`. The default queue holds 10 frames, and the code sends 12
 8. Print the settings block of each drive, with a low joint torque limit of 2 N·m:
 
 ```sh
-uv run python legs/bringup.py settings --torque-limit 2
+.venv/bin/python legs/bringup.py settings --torque-limit 2
 ```
 
 9. Connect one drive by USB, start odrivetool, and paste the block of its joint. Do this for each of the 12 drives.
@@ -137,15 +136,15 @@ odrv0.reboot()
 11. List the drives on each bus. Expected: 6 drives on each bus, state 1 (idle), and "encoder replies: 300 of 300".
 
 ```sh
-uv run python legs/bringup.py scan
+.venv/bin/python legs/bringup.py scan
 ```
 
 12. When a node shows "NOT IN THE JOINT MAP", correct the node column of `JOINTS` (step 7). The error WATCHDOG_TIMER_EXPIRED on an idle drive is normal.
-13. Read the bus voltage of each drive with `uv run python legs/bringup.py vbus`.
+13. Read the bus voltage of each drive with `.venv/bin/python legs/bringup.py vbus`.
 14. Show the joint angles live, with the motors off:
 
 ```sh
-uv run python legs/bringup.py angles
+.venv/bin/python legs/bringup.py angles
 ```
 
 15. Move each joint by hand in the direction "When the angle grows" of the joint map. Its angle must grow.
@@ -154,7 +153,7 @@ uv run python legs/bringup.py angles
 16. **CAUTION:** `bringup.py wiggle` moves one joint by ±6° (0.1 rad) for 2 s. Keep your hands and the cables away from the leg. Ctrl+C stops it.
 
 ```sh
-uv run python legs/bringup.py wiggle left_hip_roll
+.venv/bin/python legs/bringup.py wiggle left_hip_roll
 ```
 
 17. Type `yes`. Do steps 16 and 17 for the other 11 joints (name or node id).
@@ -162,21 +161,21 @@ uv run python legs/bringup.py wiggle left_hip_roll
     When all 12 joints were at their stops, press Ctrl+C. The program writes `legs/calibration.json`.
 
 ```sh
-uv run python legs/bringup.py calibrate
+.venv/bin/python legs/bringup.py calibrate
 ```
 
 19. Put the legs in the zero pose ("Zeroing"). Start the zero check, push each joint to its stop again, then press Ctrl+C.
     Each "stop error" must be smaller than 3°. A joint with "WRONG ZERO" needs step 19 again. Between 3° and 11°, do steps 18 and 19 again.
 
 ```sh
-uv run python legs/bringup.py check
+.venv/bin/python legs/bringup.py check
 ```
 
 20. **CAUTION:** `bringup.py hold` moves all 12 joints to the default pose in 2 s. Ctrl+C puts the legs in damping mode, and the motors turn off 3 s later.
     Put the legs in the zero pose, start the hold test and type `yes`. Both legs must be mirror images. A joint 24° away from its mirror joint has a wrong zero.
 
 ```sh
-uv run python legs/bringup.py hold
+.venv/bin/python legs/bringup.py hold
 ```
 
 ### E. IMU
@@ -185,10 +184,10 @@ uv run python legs/bringup.py hold
 22. Set the IMU once to 200 Hz, 230400 baud, gyro and quaternion output:
 
 ```sh
-uv run python legs/imu.py --setup
+.venv/bin/python legs/imu.py --setup
 ```
 
-23. Show the IMU values with `uv run python legs/imu.py`. Tilt the robot forward: "gravity x" must become positive. Tilt it to its left: "gravity y" must become positive.
+23. Show the IMU values with `.venv/bin/python legs/imu.py`. Tilt the robot forward: "gravity x" must become positive. Tilt it to its left: "gravity y" must become positive.
 24. When a sign is wrong, edit `IMU_TO_BODY` in `legs/imu.py`. Column k is the direction of the IMU axis k (X, Y, Z marks) in the torso frame.
 
 ### F. Policy
@@ -198,7 +197,7 @@ uv run python legs/imu.py --setup
 27. **CAUTION:** `run_policy.py` moves all joints to the default pose, then the policy moves the legs. Ctrl+C puts the legs in damping mode, and the motors turn off 3 s later.
 
 ```sh
-uv run python legs/run_policy.py --seconds 20 --knee-max 1.4
+.venv/bin/python legs/run_policy.py --seconds 20 --knee-max 1.4
 ```
 
 28. When the program prints "Ramp to the default pose", lower the robot until it stands. Keep the chains on, but slack.
@@ -206,7 +205,7 @@ uv run python legs/run_policy.py --seconds 20 --knee-max 1.4
 30. When the robot stands well, walk slowly with `--vx 0.2`. The training range is -0.5 to 0.5 m/s.
 
 - F2 needs `--knee-max 1.4`: at full knee range the foot touches a tank. `robot/launch.py` passes `[legs] knee_max` of `robot/config.toml`.
-- The policy file is `[legs] policy` of `robot/config.toml`: the shipped BHL policy `sim/sim2sim/policy_biped_25hz_a.onnx`.
+- The policy file is `[legs] policy` of `robot/config.toml`: `policies/baseline/policy.onnx`, trained for the ASMR robot configuration.
 - Our policy `sim/rl/policies/f1_v1.onnx` was trained on the F1 model and evaluated on F2. It has the same inputs and outputs, so `[legs] policy` can point to it.
 - f1_v1 has not run on the robot yet ([sim/rl/README.md](../sim/rl/README.md)).
 - At the stop, `run_policy.py` prints the time of each policy tick. Each tick must stay below 40 ms.

@@ -32,7 +32,7 @@ def test_config_ports_unique_and_offset(monkeypatch):
     base = c["ports"]["detections"] - int(os.environ.get("ROBOT_PORT_OFFSET", "0"))
     monkeypatch.setenv("ROBOT_PORT_OFFSET", "7")
     assert rc.load()["ports"]["detections"] == base + 7
-    assert rc.path("sim/sim2sim/policy_biped_25hz_a.onnx").exists(), "legs.policy must exist"
+    assert rc.path(c["legs"]["policy"]).exists(), "legs.policy must exist"
     sys.path.insert(0, str(ROOT / "aim"))
     from run import robot_setup
     spray = robot_setup(c["robot"]["concept"])[1].max_spray

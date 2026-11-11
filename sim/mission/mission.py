@@ -39,7 +39,7 @@ def load_module(path, name):
     return mod
 
 
-s2s = load_module(ROOT / "sim" / "sim2sim" / "run.py", "s2s_run")  # sim/sim2sim/run.py (aim/ also has a run.py)
+s2s = load_module(ROOT / "sim" / "sim2sim" / "bhl_legacy.py", "s2s_bhl_legacy")
 ACTION_SCALE, DEFAULT, NOISE, POLICY, TILT_LIMIT = s2s.ACTION_SCALE, s2s.DEFAULT, s2s.NOISE, s2s.POLICY, s2s.TILT_LIMIT
 observation, quat_rotate_inverse = s2s.observation, s2s.quat_rotate_inverse
 

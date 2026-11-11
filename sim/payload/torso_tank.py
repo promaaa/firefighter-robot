@@ -18,7 +18,7 @@ sys.path[:0] = [str(HERE), str(HERE.parent / "sim2sim")]
 import analyze  # noqa: E402
 import models  # noqa: E402
 import report  # noqa: E402  palette and plot style
-import run as s2s  # noqa: E402  sim/sim2sim/run.py
+import bhl_legacy as s2s  # noqa: E402  legacy BHL simulator shared helpers
 
 OUT = HERE / "results"
 ROWS = [("bare biped", "biped"), ("F2: course BOM parts, R2 tanks full", "F2"), ("F2, R2 half", "F2_half"),

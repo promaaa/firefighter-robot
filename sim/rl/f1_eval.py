@@ -25,7 +25,7 @@ import onnxruntime as ort
 
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE.parent / "sim2sim"), str(HERE.parent / "payload")]
-import run as s2s  # noqa: E402  sim/sim2sim/run.py
+import bhl_legacy as s2s  # noqa: E402  legacy BHL simulator shared helpers
 import hw_risks as hw  # noqa: E402  sim/sim2sim/hw_risks.py
 import torso_tank as tk  # noqa: E402  sim/payload/torso_tank.py: walking and push helpers
 import report  # noqa: E402  sim/payload/report.py: palette and plot style

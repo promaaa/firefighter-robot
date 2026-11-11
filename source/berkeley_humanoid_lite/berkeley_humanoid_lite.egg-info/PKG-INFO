@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: berkeley_humanoid_lite
+Version: 2025.9.7
+Summary: Training environment for Berkeley Humanoid Lite
+Author: Berkeley Humanoid Project Developers, -T.K.-
+Maintainer: Berkeley Humanoid Project Developers, -T.K.-
+License-Expression: MIT
+Project-URL: repository, https://github.com/HybridRobotics/Berkeley-Humanoid-Lite
+Keywords: robotics,isaaclab
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Isaac Sim :: 4.5.0
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: psutil
