@@ -1,6 +1,6 @@
-"""Run the BHL walking policy at 25 Hz on the 12 leg drives over CAN, or on fake drives.
+"""Run the ASMR 2026 baseline walking policy at 25 Hz on the 12 leg drives over CAN, or on fake drives.
 
-    uv run python legs/run_policy.py --fake                 fake drives on the MuJoCo biped, no hardware
+    uv run python legs/run_policy.py --fake                 fake drives on the ASMR MuJoCo model, no hardware
     uv run python legs/run_policy.py                        the robot: CAN buses and IMU of robot/config.toml
     uv run python legs/run_policy.py --vx 0.2 --knee-max 1.4 --seconds 30
     uv run python legs/run_policy.py --udp                  velocity from aim/run.py on the walk port (robot/launch.py)
@@ -29,7 +29,7 @@ import onnxruntime as ort
 from scipy.spatial.transform import Rotation
 
 import robot as rb
-from robot import sim2sim
+from source.robot_models.robots import asmr2026_policy as policy_model
 from robot_config import CONF, HOST, path  # noqa: E402  robot/ is on sys.path after `import robot`
 
 POLICY = path(CONF["legs"]["policy"])
@@ -38,6 +38,37 @@ PORTS = CONF["ports"]
 
 def enter_pressed():
     return bool(select.select([sys.stdin], [], [], 0)[0]) and sys.stdin.readline() is not None
+
+
+def check_policy():
+    """Check the configured ONNX file and observation/action shapes without opening CAN buses."""
+    if not POLICY.is_file():
+        raise FileNotFoundError(f"walking network not found: {POLICY}")
+    session = ort.InferenceSession(str(POLICY), providers=["CPUExecutionProvider"])
+    inputs, outputs = session.get_inputs(), session.get_outputs()
+    if len(inputs) != 1 or inputs[0].name != "obs":
+        raise RuntimeError(f"expected one ONNX input named 'obs', got {[x.name for x in inputs]}")
+    if len(outputs) != 1:
+        raise RuntimeError(f"expected one ONNX output, got {[x.name for x in outputs]}")
+    if inputs[0].shape[-1] != policy_model.OBSERVATION_SIZE:
+        raise RuntimeError(
+            f"expected {policy_model.OBSERVATION_SIZE} policy observations, got {inputs[0].shape}"
+        )
+    obs = policy_model.observation(
+        np.zeros(3, np.float32),
+        np.array([1.0, 0.0, 0.0, 0.0], np.float32),
+        np.zeros(3, np.float32),
+        policy_model.DEFAULT,
+        np.zeros(12, np.float32),
+        np.zeros(12, np.float32),
+    )
+    action = session.run(None, {inputs[0].name: obs})[0]
+    expected_action_shape = (1, policy_model.ACTION_SIZE)
+    if action.shape != expected_action_shape or not np.isfinite(action).all():
+        raise RuntimeError(f"expected finite policy output with shape {expected_action_shape}, got {action.shape}")
+    print(f"Policy check passed: {POLICY}")
+    print(f"  input {inputs[0].name}: {obs.shape}; output {outputs[0].name}: {action.shape}")
+    print(f"  ASMR joints: {len(policy_model.LEG_JOINTS)}; simulation modules were not loaded")
 
 
 def zyx(quat):
@@ -91,19 +122,21 @@ def run(robot, read_imu, ready, seconds, cmd, log=print, pose_out=None):
         return "; ".join(f)
     log(f"Policy runs for {seconds:.0f} s. Ctrl+C stops it.")
     get_cmd = cmd if callable(cmd) else (lambda: cmd)
-    action, period, body = np.zeros(12, np.float32), sim2sim.POLICY_DT, []
+    action, period, body = np.zeros(12, np.float32), policy_model.POLICY_DT, []
     t_end = time.monotonic() + seconds
     try:
         for _ in rb.ticks(1.0 / period):
             t0 = time.monotonic()
             q, qd = robot.read()
             quat, gyro = read_imu()
-            tilt = np.arccos(np.clip(-sim2sim.quat_rotate_inverse(quat, np.array([0, 0, -1.0]))[2], -1, 1))
-            if f := robot.faults(q) + ([f"torso tilt {tilt:.2f} rad"] if tilt > sim2sim.TILT_LIMIT else []):
+            tilt = np.arccos(np.clip(-policy_model.quat_rotate_inverse(quat, np.array([0, 0, -1.0]))[2], -1, 1))
+            if f := robot.faults(q) + ([f"torso tilt {tilt:.2f} rad"] if tilt > policy_model.TILT_LIMIT else []):
                 return "; ".join(f)
             c = np.asarray(get_cmd(), np.float32)
-            action = policy.run(None, {"obs": sim2sim.observation(c, quat, gyro, q, qd, action)})[0][0]
-            robot.command(rb.DEFAULT + sim2sim.ACTION_SCALE * action)
+            q_policy, qd_policy = rb.to_asmr(q), rb.to_asmr(qd)
+            action = policy.run(None, {"obs": policy_model.observation(c, quat, gyro, q_policy, qd_policy, action)})[0][0]
+            target_policy = policy_model.DEFAULT + policy_model.ACTION_SCALE * action
+            robot.command(rb.to_hardware_coordinates(target_policy))
             if pose_out:
                 pose_out.send(quat, float(c[0]))
             body.append(time.monotonic() - t0)
@@ -123,6 +156,7 @@ def _stop(*_):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--fake", action="store_true", help="fake drives on a MuJoCo biped")
+    ap.add_argument("--check", action="store_true", help="check the configured network and shapes; do not open CAN")
     ap.add_argument("--seconds", type=float, default=60.0)
     ap.add_argument("--vx", type=float, default=0.0, help="m/s, training range -0.5 to 0.5")
     ap.add_argument("--vy", type=float, default=0.0, help="m/s, training range -0.25 to 0.25")
@@ -131,6 +165,10 @@ def main():
     ap.add_argument("--udp", action="store_true", help="velocity from aim/run.py on the walk port, not from --vx, --vy, --yaw")
     a = ap.parse_args()
     signal.signal(signal.SIGTERM, _stop)
+
+    if a.check:
+        check_policy()
+        return
 
     buses, sim = rb.open_buses(a.fake)
     robot = rb.Robot(buses, calib=None if sim else rb.CALIB)
@@ -147,6 +185,7 @@ def main():
     read_imu()  # fails now, before a motor moves, when the IMU sends nothing
     if a.knee_max is not None:
         knees = [i for i, n in enumerate(rb.NAMES) if "knee" in n]
+        robot.lo[knees] = np.maximum(robot.lo[knees], -a.knee_max)
         robot.hi[knees] = np.minimum(robot.hi[knees], a.knee_max)
     v = min(robot.vbus().values())
     print(f"Lowest bus voltage: {v:.1f} V" + ("  (low: charge the battery, the drives trip at 21.0 V)" if v < 22.0 else ""))

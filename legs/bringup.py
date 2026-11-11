@@ -19,7 +19,7 @@ import numpy as np
 import odrive_can as oc
 import robot as rb
 
-# What you see when a joint angle grows (MuJoCo model, from the zero pose). The same for both legs.
+# What a positive angle in the existing low-level/encoder convention does, viewed on the robot.
 POSITIVE = {"hip_roll": "the foot swings to the robot's left",
             "hip_yaw": "the foot swings to the robot's left and the toes turn right (the axis is tilted)",
             "hip_pitch": "the foot swings backward", "knee_pitch": "the knee bends",
@@ -127,9 +127,12 @@ def check(robot):
         print(f"{rb.NAMES[i]:18s} {err[i]:+16.1f}" + ("   WRONG ZERO: was the leg straight at the start?" if bad[i] else ""))
 
 
-def wiggle(robot, joint, yes):
+def wiggle(robot, joint, yes, period=2.0):
     i = rb.NAMES.index(joint) if joint in rb.NAMES else rb.NAMES.index(NODE_NAME[int(joint)])
-    print(f"CAUTION: {rb.NAMES[i]} moves +-0.1 rad (+-6 deg) for 2 s. First it moves +: {positive(i)}.")
+    if not 0.5 <= period <= 10.0:
+        raise ValueError("wiggle period must be between 0.5 and 10 seconds")
+    print(f"CAUTION: {rb.NAMES[i]} moves +-0.1 rad (+-6 deg), one back-and-forth cycle over {period:g} s.")
+    print(f"First it moves +: {positive(i)}.")
     print("Before: set the low limit in each drive (bringup.py settings, --torque-limit 2). Keep hands off the leg.")
     if not yes and input("Type yes to move: ").strip() != "yes":
         return
@@ -142,15 +145,16 @@ def wiggle(robot, joint, yes):
     worst = 0.0
     try:
         for k in rb.ticks(rb.RATE):
+            elapsed = (k - 1) / rb.RATE
             target = q0.copy()
-            target[i] += 0.1 * np.sin(np.pi * k / rb.RATE)  # one period in 2 s
+            target[i] += 0.1 * np.sin(2 * np.pi * elapsed / period)
             q, _ = robot.read()
             if f := robot.faults():
                 print("Stop:", "; ".join(f))
                 break
             worst = max(worst, abs(q[i] - np.clip(target[i], robot.lo[i], robot.hi[i])))
             robot.command(target, [i])
-            if k >= 2.5 * rb.RATE:
+            if elapsed >= period:
                 break
     finally:
         robot.relax(1.0)
@@ -178,6 +182,7 @@ def main():
     ap.add_argument("joint", nargs="?", help="for wiggle: joint name or node id")
     ap.add_argument("--fake", action="store_true", help="fake drives on a MuJoCo biped")
     ap.add_argument("--torque-limit", type=float, default=2.0, help="for settings: joint torque limit (Nm)")
+    ap.add_argument("--period", type=float, default=2.0, help="for wiggle: one back-and-forth cycle in seconds (0.5 to 10)")
     ap.add_argument("--yes", action="store_true", help="do not ask before a move")
     a = ap.parse_args()
     if a.step == "settings":
@@ -205,7 +210,7 @@ def main():
         elif a.step == "wiggle":
             if not a.joint:
                 sys.exit("wiggle needs a joint name or a node id")
-            wiggle(robot, a.joint, a.yes)
+            wiggle(robot, a.joint, a.yes, a.period)
         elif a.step == "hold":
             hold(robot, a.yes)
     except KeyboardInterrupt:

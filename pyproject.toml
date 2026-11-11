@@ -1,17 +1,14 @@
 [project]
 name = "firefighter-robot"
 version = "0.1.0"
-description = "Firefighter robot on the Berkeley Humanoid Lite legs: aiming code, actuator drivers and MuJoCo simulations"
+description = "Firefighter robot: ASMR locomotion runtime, aiming software, hardware drivers and simulations"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "numpy==2.5.3",
     "scipy>=1.18",
-    "matplotlib>=3.11",
     "pillow>=12",
-    "mujoco==3.15.0",
     "onnxruntime>=1.30",
     "pyserial>=3.5",
-    "pytest>=9",
     "python-can>=4.6.1",
 ]
 
@@ -19,6 +16,13 @@ dependencies = [
 board = [
     "gpiod>=2.2",
     "rknn-toolkit-lite2==2.5.0; platform_machine == 'aarch64'",  # NPU runtime for the .rknn fire detector on the ROCK 3C
+]
+dev = [
+    "pytest>=9",
+]
+sim = [
+    "matplotlib>=3.11",
+    "mujoco==3.15.0",
 ]
 
 [tool.uv]

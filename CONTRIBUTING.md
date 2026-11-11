@@ -38,7 +38,11 @@ A number without its status and its command does not go into a report.
 3. Run the tests before you commit. They are the same as the CI checks (`.github/workflows/`):
 
 ```sh
-uv run pytest
+scripts/fetch_bhl_assets.sh
+uv sync --locked --extra sim --extra dev
+uv run --extra sim --extra dev python sim/payload/models.py
+uv run --extra sim --extra dev pytest
+uv run --extra sim --extra dev pytest legs sim/mission/test_mission.py -q
 ```
 
 4. Write the commit message in the imperative ("Add the gantry test results"), with a short body that says what changed and why.

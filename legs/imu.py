@@ -1,7 +1,7 @@
 """Hiwonder IM10A IMU (WitMotion JY901B core) on a serial port (header UART or USB), WitMotion standard protocol.
 
     uv run python legs/imu.py --setup   one time: gyro + quaternion output, 200 Hz, 230400 baud, saved in the IMU
-    uv run python legs/imu.py           live gravity direction and gyro in the torso frame, to check IMU_TO_BODY
+    uv run python legs/imu.py           live gravity direction and gyro in the ASMR base frame, to check IMU_TO_BODY
 
 Frame: 0x55, type, 4 x int16 little-endian, checksum = low byte of the sum of the first 10 bytes.
 Type 0x52: angular velocity = value / 32768 * 2000 deg/s. Type 0x59: quaternion (w, x, y, z) = value / 32768.
@@ -18,14 +18,17 @@ from pathlib import Path
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-sys.path.append(str(Path(__file__).resolve().parents[1] / "robot"))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.append(str(ROOT / "robot"))
 from robot_config import CONF  # noqa: E402
+from source.robot_models.robots.asmr2026_model import IMU_TO_BODY as ASMR_IMU_TO_BODY  # noqa: E402
 
 PORT, BAUD = CONF["imu"]["port"], CONF["imu"]["baud"]  # robot/config.toml: header UART. The doc allows 460800 only for other WitMotion models.
 GYRO, QUAT = 0x52, 0x59
-# IMU -> torso rotation. Column k = the direction of IMU axis k (the X, Y, Z marks on the IMU) in the torso frame
-# (x forward, y left, z up). The identity means: the IMU lies flat, X mark forward. CHECK on the robot (README).
-IMU_TO_BODY = np.eye(3)
+# IMU -> ASMR base rotation. Column k is the direction of IMU axis k (the X, Y, Z marks on the board) in the base
+# frame (x forward, y left, z up), from the ASMR MJCF mount. Confirm this expected 90-degree mount against the board.
+IMU_TO_BODY = np.asarray(ASMR_IMU_TO_BODY, dtype=float)
 
 
 def parse(buf):
