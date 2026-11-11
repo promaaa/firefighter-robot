@@ -91,7 +91,7 @@ def board_info():
         except OSError:
             return None
     temp = read("/sys/class/thermal/thermal_zone0/temp")
-    return {"host": socket.gethostname(), "machine": platform.machine(), "model": read("/proc/device-tree/model") or platform.processor(),
+    return {"host": socket.gethostname(), "machine": platform.machine(), "model": read("/proc/device-tree/model").rstrip("\0") or platform.processor(),
             "cpus": os.cpu_count(), "temp_c": round(int(temp) / 1000, 1) if temp else None, "load": os.getloadavg()}
 
 

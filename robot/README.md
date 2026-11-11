@@ -108,11 +108,18 @@ Do the steps in this order. Each `bench.py` test prints PASS, FAIL or WARN with 
 
 ### 1. SD card
 
-- Write `rock-3c_bookworm_kde_b1.output_512.img.xz` ([Radxa releases](https://github.com/radxa-build/rock-3c/releases)) to a 32 GB microSD card with balenaEtcher.
+- Write `rock-3c_bookworm_kde_b1.output_512.img.xz` ([Radxa releases](https://github.com/radxa-build/rock-3c/releases)) to a 32 GB microSD card with balenaEtcher. If balenaEtcher reports a failed validation, write it with `xz -dc IMAGE | sudo dd of=/dev/rdiskN bs=4m` (macOS) instead.
 - **CAUTION:** Writing the image erases the card. Check the drive letter first.
 - **CAUTION:** The ROCK 3C takes 5 V only. 12 V on its USB-C port destroys the board.
-- Boot it with Ethernet, HDMI and a keyboard. Log in as `radxa` with the password `radxa`, and change it with `passwd`.
-- `hostname -I` gives the IP address. Then work over ssh.
+- Power it from a 5 V 3 A USB-C supply. On a computer USB port, the board restarts under load (measured 11 Nov 2026).
+- Without Ethernet: before the first boot, open the `config` partition of the card and add these lines to `before.txt`. The board then joins the Wi-Fi and starts ssh (the Wi-Fi needs the antenna).
+
+```sh
+connect_wi-fi NETWORK_NAME PASSWORD
+enable_service ssh
+```
+
+- Log in as `radxa` with the password `radxa`, and change it with `passwd`. `hostname -I` gives the IP address. Then work over ssh.
 
 ### 2. Install
 

@@ -75,28 +75,48 @@ Both files take a 416 x 320 input: a 640 x 480 camera image becomes 416 x 312 wi
 
 ## On the robot board (RK3566)
 
-We plan to run the INT8 model on the NPU, so that the CPU stays free for the other robot programs.
-Estimate only: Rockchip gives 22.6 frames per second for YOLO11n INT8 at 640 x 640 on the RK3566, network only [1].
-Our input has 0.33 times as many pixels. If the time scales with the pixels, that is about 60 frames per second. The target is 10 frames per second, the rate of `aim/`.
-**Open:** "Measured on board" is still missing. `board_bench.py` is the first test on the board (about 2 minutes). Run it on the board, from the repository root.
+The robot runs the INT8 model on the NPU, so that the CPU stays free for the other robot programs. The target is 10 frames per second, the rate of `aim/`.
 
-1. When `/usr/lib/librknnrt.so` does not exist, install the NPU runtime library:
+Measured on board, 11 Nov 2026 (ROCK 3C, Radxa OS Debian 12, kernel 6.1, NPU driver 0.9.8, librknnrt 2.5.0; [results/board_bench_rock-3c.md](results/board_bench_rock-3c.md)):
+
+| Model and runtime | Detector (ms, median) | Camera + detector (fps) | 10 fps target |
+|---|---|---|---|
+| NPU INT8, `fire_yolo11n_416x320_int8.rknn` | 43.6 | 21.2 | PASS |
+| NPU INT8, `fire_yolo11n_640x480_int8.rknn` | 70.5 | 13.5 | PASS |
+| NPU INT8, `p2bench`, 416 x 320 | 66.5 | 14.2 | PASS |
+| NPU INT8, `p2bench`, 640 x 480 | 114.8 | 8.3 | FAIL |
+| CPU (onnxruntime, 4 threads), 416 x 320 | 246.5 | 3.8 | FAIL |
+
+- The camera program (`robot/bench.py camera`, B0201 on the board, 1 ms exposure, a candle video on a screen) runs at 14.5 fps with `fire_yolo11n_416x320_int8.rknn` and finds the flame in 267 of 267 frames.
+- **Known issue:** `p2bench` gives wrong boxes on the NPU (the whole candle, or boxes at the image edge), in INT8 and in fp16. The same model in ONNX on the laptop, and in the Rockchip simulator, gives the right box. So the robot uses `fire_yolo11n_416x320_int8.rknn` until this is fixed. `cam416` INT8 gives the right boxes on the NPU.
+
+### NPU setup
+
+`robot/setup/install.sh` (step 11) does both steps. By hand:
+
+1. Enable the NPU. The Radxa image ships with it disabled. Then reboot.
+
+```sh
+sudo rsetup enable_overlays rk3568-npu-enable.dtbo
+```
+
+2. Install the NPU runtime 2.5.0. The image has 2.3.0, and our `.rknn` models need 2.5.0.
 
 ```sh
 sudo curl -L -o /usr/lib/librknnrt.so https://raw.githubusercontent.com/airockchip/rknn-toolkit2/v2.5.0/rknpu2/runtime/Linux/librknn_api/aarch64/librknnrt.so
 ```
 
-2. Plug in the B0201 camera. Then run the test. Without a camera, add `--video FILE`:
+3. Check: `/sys/class/devfreq/fde40000.npu` exists, and `sudo cat /sys/kernel/debug/rknpu/version` prints the driver version.
+
+### Speed test
+
+The `.rknn` models other than `fire_yolo11n_416x320_int8.rknn` are not in git. Copy them from the laptop (docs/plan/vision.md, V6). Plug in the B0201 camera, then run from the repository root. Without a camera, add `--video FILE`:
 
 ```sh
 uv run --with rknn-toolkit-lite2==2.5.0 python vision/board_bench.py
 ```
 
-3. Read the table. A model that cannot load shows "skipped" and the reason. Commit the copy that the script writes to `vision/results/board_bench_<host>.md`.
-
-- PASS on the NPU row: use the RKNN model in the camera node (`FIRE_MODEL`, table above).
-- PASS on the CPU rows only: the ONNX model on the CPU is enough, with less margin.
-- FAIL on all rows: first try a lower camera rate (`[camera] fps` in `robot/config.toml`).
+A model that cannot load shows "skipped" and the reason. The script writes `vision/results/board_bench_<host>.md`.
 
 ## Camera (Arducam B0201)
 

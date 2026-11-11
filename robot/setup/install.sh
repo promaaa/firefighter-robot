@@ -13,6 +13,7 @@
 set -euo pipefail
 
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
+RKNN_VERSION=2.5.0  # same as rknn-toolkit-lite2 in pyproject.toml and rknn-toolkit2 in vision/rknn_convert.py
 DRY=0 KEEP_DESKTOP=0 RENDER="" REBOOT=0
 USER_NAME=${SUDO_USER:-$USER}
 USER_HOME=$(getent passwd "$USER_NAME" | cut -d: -f6)
@@ -234,6 +235,23 @@ elif [[ $(systemctl get-default) == graphical.target ]]; then
   REBOOT=1
 else
   echo "  already $(systemctl get-default)"
+fi
+
+step "11. NPU for the fire detector: overlay rk3568-npu-enable and runtime librknnrt.so $RKNN_VERSION"
+# The Radxa image ships with the NPU disabled and librknnrt 2.3.0. Our .rknn models need 2.5.0 (measured on board, 11 Nov).
+if [[ -f /boot/dtbo/rk3568-npu-enable.dtbo ]]; then
+  echo "  enabled: /boot/dtbo/rk3568-npu-enable.dtbo"
+elif command -v rsetup >/dev/null || [[ $DRY == 1 ]]; then
+  run sudo rsetup enable_overlays rk3568-npu-enable.dtbo
+  REBOOT=1
+else
+  echo "  WARNING: no rsetup. Enable rk3568-npu-enable by hand (vision/README.md)."
+fi
+if strings /usr/lib/librknnrt.so 2>/dev/null | grep -q "librknnrt version: $RKNN_VERSION"; then
+  echo "  librknnrt $RKNN_VERSION already installed"
+else
+  run sudo curl -fsSL -o /usr/lib/librknnrt.so \
+    "https://raw.githubusercontent.com/airockchip/rknn-toolkit2/v$RKNN_VERSION/rknpu2/runtime/Linux/librknn_api/aarch64/librknnrt.so"
 fi
 
 step "Done"

@@ -186,6 +186,8 @@ uv run python vision/range_test.py report SESSION --model vision/models/fire_yol
 ```
 
 5. Look at `truth.jpg` first. Each green box must be on a flame. Run `label SESSION --redo` for a wrong one.
+6. In `report.md`, read the table "Confirmed false alarms". It counts each time 3 frames with a box fall within 0.6 s in the clips without a flame. With this rule, the robot walks to a fire (`aim/controller.py`). Take the lowest threshold without one, for the detector, mode and exposure that the robot will use.
+7. Run the command of step 4 again with `--conf T` at the end, where T is that threshold. The tables then show the distances that this threshold keeps. The detections are saved, so it is fast.
 
 ### V6 board speed and NPU accuracy
 
@@ -321,9 +323,20 @@ Left-out videos only, each model at the threshold that gives at most 2 % LED-can
 
 On flames that it did not see, the model trained with the B0201 frames finds the most flames in every column, with the same false alarms. Example, 1 ms, fold b, 416 x 320: 56 % of the 8 to 15 px flames, against 12 % for `p2cam416` and 5 % for our detector now. At 1 ms, the fold models also put fewer boxes on the LED candle that they did not see: 3 % to 15 % of these frames at their own threshold, against 17 % to 36 % for `p2cam416`. On the test images, `p2bench` loses a little (table above): mAP50 0.819 instead of 0.830, and 8.5 % instead of 6.2 % of the new scenes without fire get a false fire. In INT8 (Rockchip simulator) it keeps mAP50 0.803. Measured on laptop (computed on fermat).
 
+INT8 on the same left-out frames (6 Nov, Rockchip simulator, `rknn_convert.py RUN/onnx/FILE --bench RUN_DIR --videos <fold>`, files `det_*_int8_sim.json` in the run folder). 1 ms, each model at the threshold that gives at most 2 % LED-candle frames with a box. Each cell: flames 8 to 15 px / 16 to 31 px found.
+
+| Model and input | Fold a, ONNX | Fold a, INT8 | Fold b, ONNX | Fold b, INT8 |
+|---|---|---|---|---|
+| all416, 416 x 320 (now on the robot) | 21 / 69 % | 20 / 63 % | 5 / 25 % | 4 / 25 % |
+| all416, 640 x 480 | 57 / 57 % | 57 / 53 % | 19 / 33 % | 19 / 31 % |
+| p2bench of the fold, 416 x 320 | 93 / 95 % | 95 / 96 % | 56 / 79 % | 54 / 80 % |
+| p2bench of the fold, 640 x 480 | 100 / 100 % | 100 / 100 % | 64 / 78 % | 64 / 79 % |
+
+In INT8, the `p2bench` fold models change by 2 points at most, and their thresholds by 0.04 at most. Our detector loses up to 6 points. At each model's own threshold, `p2bench` changes by 1 point at most, and our detector at 640 x 480 loses 8 points on fold a. So the gain of `p2bench` on small flames stays in INT8. The full `p2bench` saw all these videos, so its fold models stand in for it. The simulator is not the NPU: V6 step 6 repeats the check on the board. Measured on laptop (simulator).
+
 Limits: the left-out flames are still images on the same screen, filmed in the same night, so the model can learn the look of this screen. The gain on real candles can be smaller: only V4 shows it. `p2bench` (all videos) is the model for the robot, but its own screen bench numbers are not a fair test, because it saw all the videos.
 
-Proposal for the decision of 11 Nov (Marc): a fixed 1 ms exposure, if V4 confirms it with real flames. `p2bench` if V4 confirms its gain on real candles, else `cam416`. The false alarms of the demo room (V4 step 2) set the threshold, and the board speed (V6) sets the input size.
+Proposal for the decision of 11 Nov (Marc): a fixed 1 ms exposure, if V4 confirms it with real flames. `p2bench` if V4 confirms its gain on real candles, else `cam416`. The confirmed false alarms of the demo room (V4 steps 2 and 6: 3 frames with a box within 0.6 s) set the threshold, and the board speed (V6) sets the input size.
 
 ## Decisions and dates
 
@@ -348,8 +361,11 @@ Requirement R1 of the [plan](README.md#requirements-and-verification) is for a 1
 | Screen bench V2, B0201 with the automatic exposure (run `2026-11-05_1834`, set v2: eight flames, two LED candles) | 5 Nov | 4261 of 4320 images kept. Our detector (416 x 320) finds 7 % of the 8 to 15 px flames and 30 % of the 16 to 31 px flames (ideal camera: 68 % and 99 %). Best model: `p2cam416` at 640 x 480, 42 % and 72 %. See "Model changes". Measured on laptop. |
 | Screen bench V2, B0201 at a fixed 1 ms exposure (run `2026-11-05_2130`) | 6 Nov | 4316 of 4320 images kept. Our detector finds 18 % and 53 %. With at most 2 % LED-candle frames with a box: `cam416` at 640 x 480 finds 48 % and 86 %. See "Model changes". Measured on laptop. |
 | `p2bench`: B0201 screen bench frames in the training, two folds of left-out videos | 6 Nov | 1 ms, 416 x 320, 2 % LED-candle frames with a box: 56 % to 93 % of the 8 to 15 px flames of videos that the model did not see (our detector now: 5 % to 21 %). Test images: mAP50 0.819 (`p2cam416`: 0.830). INT8 in the Rockchip simulator: 0.803. Measured on laptop. |
+| INT8 check on the same left-out screen bench frames (Rockchip simulator, 1 ms) | 6 Nov | At 2 % LED-candle frames with a box, the `p2bench` fold models change by 2 points at most: 8 to 15 px flames at 416 x 320, 95 % and 54 % (ONNX 93 % and 56 %). Our detector loses up to 6 points. Measured on laptop (simulator). |
 | Ideal camera on the screen bench (`--fake`) | 3 Nov | 50 % detection from 16 px (candle, 416 x 320) and 11 px (candle, 640 x 480). Tea light: 8 px and 6 px. Measured on laptop. |
 | `small416` on the same ideal-camera frames | 5 Nov | Candle: 50 % from 23 px (416 x 320) and 16 px (640 x 480), so worse than the old model. Tea light: 8 px and 6 px, the same. Measured on laptop. |
 | `small416` on the test images ([metrics.md](../../vision/results/small416/metrics.md)) | 5 Nov | mAP50 0.808 (old model 0.809), small fires 0.525 (0.529), new scenes 0.749 (0.747). False fires on fire-like images: 2.1 % (2.1 %). Measured on laptop. |
+| Board speed V6 (`board_bench.py`, video input) | 11 Nov | Camera + detector on the ROCK 3C NPU, INT8: our detector 21.2 fps at 416 x 320 and 13.5 fps at 640 x 480. `p2bench` 14.2 fps at 416 x 320, 8.3 fps at 640 x 480 (below 10 fps). CPU only, 4 threads: 3.8 fps. Setup needed: NPU overlay and librknnrt 2.5.0 (`install.sh` step 11), and a 5 V 3 A supply: on a computer USB port the board restarted under load. Measured on board. |
+| Camera node V7 (`robot/bench.py camera`) | 11 Nov | B0201 on the board, 1 ms exposure, candle video on the screen: 14.5 fps, the flame found in 267 of 267 frames with `fire_yolo11n_416x320_int8.rknn`. `p2bench` on the NPU boxes the whole candle (INT8 and fp16), while ONNX on the laptop boxes the flame: open issue, the robot keeps our detector. NPU accuracy on the bench frames: not run yet. Measured on board. |
 
 Licence: this document is CC BY-SA 4.0.
