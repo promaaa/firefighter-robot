@@ -187,6 +187,9 @@ def test_range_test_truth_and_tiles(tmp_path):
     b, s = rt.tiled(detector.FireDetector(tmp_path / "m.onnx", calib=None), np.zeros((1080, 1920, 3), np.uint8), 0.5)
     assert len(b) == 9 and np.allclose(s, 0.8)
     assert sorted({round(x) for x in b[:, 0]}) == [300, 940, 1580] and sorted({round(y) for y in b[:, 1]}) == [206, 506, 806]
+    assert rt.FPS == 10  # the confirmation rule: 3 frames with a box within 0.6 s = within 7 frames
+    assert rt.alarms([1, 0, 0, 0, 0, 1, 1]) == 1 and rt.alarms([1, 0, 0, 0, 0, 0, 1, 1]) == 0
+    assert rt.alarms([1] * 30) == 1 and rt.alarms([1, 1, 1] + [0] * 7 + [1, 1, 1]) == 2  # one alarm per run of boxes
 
 
 def test_bench_compare_rates_and_videos(tmp_path):

@@ -10,7 +10,16 @@ Writes ~/runs/firefighter/vision/rknn/<model>_int8.rknn and <model>_fp16.rknn, a
 fixed subset of the test images (preds_<model>_<type>.npz). A model in a training run (RUN/onnx/FILE) gets the run name in
 front, as in screen_bench.py: p2bench_fire_yolo11n_416x320. Compare them with the ONNX model: evaluate.py --rknn FILE.
 The simulator runs on the PC. It shows the accuracy of the converted model, not the speed on the board.
+
+INT8 on the frames of a screen bench run (about 0.1 s per frame at 416 x 320, 0.2 s at 640 x 480):
+  uv run --script rknn_convert.py RUN/onnx/fire_yolo11n_416x320.onnx --bench ~/runs/firefighter/screen_bench/RUN_DIR
+It writes det_<model>_int8_sim.json into RUN_DIR, next to the det files of the ONNX models: bench_compare.py RUN_DIR compares
+them. "_sim", because the board writes det_<model>_int8.json with the real NPU (screen_bench.py report, docs/plan/vision.md
+V6), and a det file that exists is not computed again. --videos Jahobr,GilesLaurent,flameless_candle_1 keeps only the
+videos that a p2bench_a model did not see (train.py FOLDS).
 """
+import argparse
+import json
 import random
 import sys
 import time
@@ -63,32 +72,48 @@ def convert(onnx_path, name, quant, w, h):
 
 
 def main():
-    onnx_path = Path(sys.argv[1]).resolve()
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("onnx")
+    ap.add_argument("--bench", type=Path, help="screen bench run folder: INT8 only, on its frames instead of the test images")
+    ap.add_argument("--videos", type=lambda s: s.split(","), help="with --bench: only these source videos (comma-separated parts of names)")
+    a = ap.parse_args()
+    onnx_path = Path(a.onnx).resolve()
     name = f"{onnx_path.parent.parent.name}_{onnx_path.stem}" if onnx_path.parent.name == "onnx" else onnx_path.stem
     import onnx
     dims = onnx.load(str(onnx_path)).graph.input[0].type.tensor_type.shape.dim
     h, w = dims[2].dim_value, dims[3].dim_value
     OUT.mkdir(parents=True, exist_ok=True)
-    rng = random.Random(0)
-    files = []
-    for source, n in SUBSET.items():
-        imgs = sorted((DATA / "test" / source / "images").glob("*.jpg"))
-        files += [(source, f) for f in sorted(rng.sample(imgs, min(n, len(imgs))))]
-    for quant in (True, False):
+    if a.bench:  # source = the frame name in trials.jsonl, the key of the det files
+        from bench_compare import trials
+        files = [(f, a.bench / f) for t in trials(a.bench, a.videos) for f in t["frames"]]
+    else:
+        rng = random.Random(0)
+        files = []
+        for source, n in SUBSET.items():
+            imgs = sorted((DATA / "test" / source / "images").glob("*.jpg"))
+            files += [(source, f) for f in sorted(rng.sample(imgs, min(n, len(imgs))))]
+    conf = 0.1 if a.bench else 0.001  # the det files of screen_bench.py keep the boxes from 0.1
+    for quant in (True,) if a.bench else (True, False):
         rknn = convert(onnx_path, name, quant, w, h)
         if rknn.init_runtime() != 0:  # no target: the simulator
             raise SystemExit("init_runtime (simulator) failed")
         recs, t0 = [], time.time()
         for k, (source, f) in enumerate(files):
             x, s, (px, py) = uint8_input(f, w, h)
-            b, sc = decode(rknn.inference(inputs=[x[None]], data_format="nhwc"), 0.001, NMS_IOU)
+            b, sc = decode(rknn.inference(inputs=[x[None]], data_format="nhwc"), conf, NMS_IOU)
             im = Image.open(f)
             b = np.clip((b - [px, py, px, py]) / s, 0, [im.width, im.height, im.width, im.height])
             recs.append(dict(source=source, file=str(f), boxes=b[:100], scores=sc[:100]))
             if k % 100 == 0:
                 print(k, len(files), f"{time.time() - t0:.0f} s", flush=True)
-        dst = OUT / f"preds_{name}_{'int8' if quant else 'fp16'}.npz"
-        np.savez_compressed(dst, recs=np.array(recs, dtype=object))
+        kind = "int8" if quant else "fp16"
+        if a.bench:  # the format of screen_bench.py detections()
+            dst = a.bench / f"det_{name}_{kind}_sim.json"
+            dst.write_text(json.dumps({r["source"]: [[round(float(v), 1) for v in x] + [round(float(y), 3)]
+                                                     for x, y in zip(r["boxes"], r["scores"])] for r in recs}))
+        else:
+            dst = OUT / f"preds_{name}_{kind}.npz"
+            np.savez_compressed(dst, recs=np.array(recs, dtype=object))
         print("wrote", dst)
         rknn.release()
 

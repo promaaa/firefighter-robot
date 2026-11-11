@@ -14,12 +14,15 @@ the camera's own MJPEG frames. Writes ~/runs/firefighter/range_test/<date>/sessi
 The distance is on the floor, from the point under the camera lens to the candle.
 label: shows one frame of each position and mode. Drag a box around the flame or the group of flames (a click is enough
 for one small flame), then press Enter. n: no flame visible. q: stop. The boxes go into session.json.
-report: 5 frames per second of each clip. The true flame box of a frame is the box of the bright pixels inside the label
+report: 10 frames per second of each clip. The true flame box of a frame is the box of the bright pixels inside the label
 box. --model runs a YOLO file on the whole frame, --tiled on 640 x 480 tiles of a larger frame (a digital zoom),
 --detector any file with detect(rgb, t), for example sim/sim2sim/baseline_detector.py. Default: --model of detector.py.
 Writes report.md, range.png and truth.jpg (each clip: label box yellow, true box green, detections of the first detector
 red). det_<name>.json keeps the detections, so the next report is fast. On the robot board, --model with the .rknn file
 adds the NPU rows on the same clips.
+The clips without a flame also give the confirmed false alarms: the robot walks to a fire only after 3 frames with a box
+within 0.6 s (aim/controller.py). The report gives them by threshold, and the lowest threshold without one. --conf sets
+the threshold of all other tables: run the report again with that threshold to see the range that it keeps.
 """
 import argparse
 import importlib.util
@@ -39,7 +42,20 @@ from detector import CONF, MODEL, FireDetector, nms  # noqa: E402
 from screen_bench import bright_box, grey, model_name, near  # noqa: E402
 
 RUNS = Path.home() / "runs/firefighter/range_test"
-FPS = 5  # frames per second that the report uses
+FPS = 10  # frames per second that the report uses: the controller rate (aim/run.py RATE), one detection per step
+CONFIRM = (3, 0.6)  # aim/controller.py confirm_frames and confirm_window: frames with a fire within this time, then APPROACH
+THRESHOLDS = [0.3, 0.4, 0.5, 0.6, 0.7]  # columns of the confirmed false alarm table
+
+
+def alarms(has, n=CONFIRM[0], window=CONFIRM[1]):
+    """Confirmed alarms in one clip: each time n frames with a box fall within window s, counted once until fewer are left.
+    has: one bool per frame, FPS frames per second."""
+    k, on, count = round(window * FPS) + 1, False, 0  # the frames within window s of a frame, itself included
+    for i in range(len(has)):
+        now = sum(has[max(0, i - k + 1):i + 1]) >= n
+        count += now and not on
+        on = now
+    return count
 
 
 # ---------------------------------------------------------------- record
@@ -200,6 +216,8 @@ def detectors(a):
 
 
 def report(a):
+    global CONF
+    CONF = a.conf  # the threshold of the tables, the tiles and the --detector boxes
     run = Path(a.session).expanduser()
     s = json.loads((run / "session.json").read_text())
     dets = detectors(a)
@@ -221,6 +239,7 @@ def report(a):
             away = [any(t is None or not near(b, t, pad) for b in bs) for bs, t in zip(per, tr)]
             rows.append(dict(c, det=n, mode=f"{c['width']}x{c['height']}", frames=len(f), labelled=roi is not None,
                              hit=float(np.mean(hit)), away=float(np.mean(away)), any=float(np.mean([bool(b) for b in per])),
+                             best=[max((b[4] for b in fr), default=0.0) for fr in cache[n][c["file"]]],  # best score per frame
                              tw=float(np.median([t[2] - t[0] for t in tr])) if roi else None,
                              th=float(np.median([t[3] - t[1] for t in tr])) if roi else None))
         sheet.append(tile(f[len(f) // 2], roi, tr[len(f) // 2], cache[next(iter(dets))][c["file"]][len(f) // 2], c))
@@ -286,6 +305,22 @@ def write(run, s, rows, sheet):
         yf = sum(r["frames"] for r in sel if r["fire"] != "none" and r["labelled"])
         L.append(f"| {d}, {m}, {e} | " + (f"{100 * sum(no) / nf:.0f} % of {nf}" if nf else "-") + " | "
                  + (f"{100 * sum(yes) / yf:.0f} % of {yf}" if yf else "-") + " |")
+    none = [r for r in rows if r["fire"] == "none"]
+    if none:
+        L += ["", "## Confirmed false alarms", "", (f"No flame: each time {CONFIRM[0]} frames with a box fall within {CONFIRM[1]} s. "
+              "Then the robot walks to the fire (aim/controller.py). Per minute of video, by threshold. It is an upper bound: the "
+              "controller also needs the boxes at one place on the floor. Choose the threshold here, not from single frames."), "",
+              "| Detector, mode, exposure | Minutes | " + " | ".join(f"Threshold {t:g}" for t in THRESHOLDS)
+              + " | Lowest threshold without one |", "|---|---|" + "---|" * (len(THRESHOLDS) + 1)]
+        for d, m, e in combos:
+            sel = [r for r in none if (r["det"], r["mode"], r["exposure"]) == (d, m, e)]
+            if not sel:
+                continue
+            mins = sum(r["frames"] for r in sel) / FPS / 60
+            count = lambda t: sum(alarms([b >= t for b in r["best"]]) for r in sel)  # noqa: E731, B023
+            low = next((t for t in np.round(np.arange(0.1, 0.96, 0.05), 2) if count(t) == 0), None)
+            L.append(f"| {d}, {m}, {e} | {mins:.1f} | " + " | ".join(f"{count(t) / mins:.1f}" for t in THRESHOLDS)
+                     + f" | {f'{low:.2f}' if low is not None else 'over 0.95'} |")
     (run / "report.md").write_text("\n".join(L) + "\n")
     if fires:
         fig, axs = plt.subplots(1, len(fires), figsize=(5 * len(fires), 3.6), squeeze=False)
@@ -333,6 +368,7 @@ def main():
     p.add_argument("--model", action="append", help="YOLO file (.onnx, or .rknn on the board) on the whole frame. Repeat for more")
     p.add_argument("--tiled", action="append", help="YOLO file on 640 x 480 tiles of larger frames")
     p.add_argument("--detector", action="append", help="file with detect(rgb, t)")
+    p.add_argument("--conf", type=float, default=CONF, help=f"detector threshold of the tables (default {CONF}, from 0.1)")
     a = ap.parse_args()
     {"record": record, "label": label, "report": report}[a.cmd](a)
 
