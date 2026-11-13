@@ -1,0 +1,2 @@
+time,gains,pos_gain,vel_gain,integrator,mass_kg,arm_m,tau_Nm,cycles,amp_deg,speed_deg_s,sag_deg,kp_ext,kp_iq,kp_expected,kt_ratio,fric_arm_Nm,fric_arm_sd,fric_load_Nm,fric_load_sd,fric_slope
+20261105_210754,asis,12.600000381469727,0.22300000488758087,0.0,2.486,0.1,2.4388,5,6.0,6.0,1.3857,100.84,100.48,100.62,1.0036,0.475,0.0044,0.6719,0.0122,0.0807

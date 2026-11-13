@@ -1,0 +1,5 @@
+# {"id": "04", "motor": "6512", "speed": 10.0, "reverse": 30.0, "minutes_planned": 20.0, "prev_minutes": 20.55, "stop": "Ctrl+C로 중단"}
+kind,t_min,v_cmd_turn_s,v_turn_s,tau_Nm,fet_C,vbus_V
+check,0.089,1.0,1.0,0.351,26.6,12.0
+run,0.574,10.0,9.89,0.3657,27.9,12.06
+run,1.074,-10.0,-9.892,-0.364,28.8,12.02

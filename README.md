@@ -18,6 +18,7 @@ Team SOBANG · Seoul National University · ASMR 2026.
 | Electrical drawings and power-on tests | [docs/hardware/electrical.md](docs/hardware/electrical.md) |
 | Water system | [docs/hardware/water.md](docs/hardware/water.md) |
 | Robot software on the ROCK 3C | [robot](robot/README.md), [legs](legs/README.md), [aim](aim/README.md) |
+| Leg actuator bench tests, drive setup records, sim-vs-real GUI (laptop) | [ASMR_Actuator_Test](ASMR_Actuator_Test/README.md) |
 | Fire detector | [vision](vision/README.md) |
 | Simulations | [sim](sim/README.md) |
 
