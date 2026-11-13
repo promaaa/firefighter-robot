@@ -1,0 +1,8 @@
+# Python 3.12, 가상환경 %USERPROFILE%\odrv051 에 설치됨
+#   py -3.12 -m venv %USERPROFILE%\odrv051
+#   %USERPROFILE%\odrv051\Scripts\activate
+#   pip install -r requirements.txt
+odrive==0.5.1.post0   # odrivetool. 펌웨어 0.5.1과 버전을 맞춤 (numpy, matplotlib 포함)
+python-can            # slcan / gs_usb / pcan / virtual
+gs_usb                # candleLight 펌웨어 어댑터용
+libusb-package        # gs_usb가 쓰는 libusb-1.0.dll (CAN 프로세스에서만 로드)

@@ -1,0 +1,242 @@
+{
+  "id": "06",
+  "motor": "6512",
+  "time": "2026-11-07 10:09:25",
+  "serial": "327634873435",
+  "fw": "0.5.1",
+  "backup": null,
+  "rows": [
+    {
+      "name": "vbus_voltage",
+      "path": "vbus_voltage",
+      "value": 12.031786918640137,
+      "expected": null,
+      "status": ""
+    },
+    {
+      "name": "control_mode",
+      "path": "axis0.controller.config.control_mode",
+      "value": 3,
+      "expected": 3,
+      "status": "OK"
+    },
+    {
+      "name": "input_mode",
+      "path": "axis0.controller.config.input_mode",
+      "value": 1,
+      "expected": 1,
+      "status": "OK"
+    },
+    {
+      "name": "pos_gain",
+      "path": "axis0.controller.config.pos_gain",
+      "value": 12.600000381469727,
+      "expected": 15.71,
+      "status": "다름"
+    },
+    {
+      "name": "vel_gain",
+      "path": "axis0.controller.config.vel_gain",
+      "value": 0.22300000488758087,
+      "expected": 0.16,
+      "status": "다름"
+    },
+    {
+      "name": "vel_integrator_gain",
+      "path": "axis0.controller.config.vel_integrator_gain",
+      "value": 0.0,
+      "expected": 0.0,
+      "status": "OK"
+    },
+    {
+      "name": "vel_limit",
+      "path": "axis0.controller.config.vel_limit",
+      "value": 50.0,
+      "expected": 50.0,
+      "status": "OK"
+    },
+    {
+      "name": "enable_overspeed_error",
+      "path": "axis0.controller.config.enable_overspeed_error",
+      "value": true,
+      "expected": null,
+      "status": ""
+    },
+    {
+      "name": "vel_limit_tolerance",
+      "path": "axis0.controller.config.vel_limit_tolerance",
+      "value": 1.2000000476837158,
+      "expected": null,
+      "status": ""
+    },
+    {
+      "name": "current_lim",
+      "path": "axis0.motor.config.current_lim",
+      "value": 18.0,
+      "expected": 18.0,
+      "status": "OK"
+    },
+    {
+      "name": "torque_constant",
+      "path": "axis0.motor.config.torque_constant",
+      "value": 0.06700000166893005,
+      "expected": 0.067,
+      "status": "OK"
+    },
+    {
+      "name": "torque_lim",
+      "path": "axis0.motor.config.torque_lim",
+      "value": Infinity,
+      "expected": null,
+      "status": ""
+    },
+    {
+      "name": "motor.pre_calibrated",
+      "path": "axis0.motor.config.pre_calibrated",
+      "value": true,
+      "expected": true,
+      "status": "OK"
+    },
+    {
+      "name": "pole_pairs",
+      "path": "axis0.motor.config.pole_pairs",
+      "value": 14,
+      "expected": 14,
+      "status": "OK"
+    },
+    {
+      "name": "encoder.mode",
+      "path": "axis0.encoder.config.mode",
+      "value": 257,
+      "expected": 257,
+      "status": "OK"
+    },
+    {
+      "name": "encoder.cpr",
+      "path": "axis0.encoder.config.cpr",
+      "value": 16384,
+      "expected": 16384,
+      "status": "OK"
+    },
+    {
+      "name": "encoder.bandwidth",
+      "path": "axis0.encoder.config.bandwidth",
+      "value": 3000.0,
+      "expected": 3000.0,
+      "status": "OK"
+    },
+    {
+      "name": "encoder.pre_calibrated",
+      "path": "axis0.encoder.config.pre_calibrated",
+      "value": true,
+      "expected": true,
+      "status": "OK"
+    },
+    {
+      "name": "can_node_id",
+      "path": "axis0.config.can_node_id",
+      "value": 6,
+      "expected": null,
+      "status": ""
+    },
+    {
+      "name": "can.baud_rate",
+      "path": "can.config.baud_rate",
+      "value": 500000,
+      "expected": 500000,
+      "status": "OK"
+    },
+    {
+      "name": "can_heartbeat_rate_ms",
+      "path": "axis0.config.can_heartbeat_rate_ms",
+      "value": 100,
+      "expected": null,
+      "status": ""
+    },
+    {
+      "name": "axis1.can_node_id",
+      "path": "axis1.config.can_node_id",
+      "value": 63,
+      "expected": 63,
+      "status": "OK"
+    },
+    {
+      "name": "axis1.heartbeat_ms",
+      "path": "axis1.config.can_heartbeat_rate_ms",
+      "value": 0,
+      "expected": 0,
+      "status": "OK"
+    },
+    {
+      "name": "startup_encoder_cal",
+      "path": "axis0.config.startup_encoder_offset_calibration",
+      "value": false,
+      "expected": false,
+      "status": "OK"
+    },
+    {
+      "name": "startup_closed_loop",
+      "path": "axis0.config.startup_closed_loop_control",
+      "value": false,
+      "expected": null,
+      "status": ""
+    },
+    {
+      "name": "enable_watchdog",
+      "path": "axis0.config.enable_watchdog",
+      "value": false,
+      "expected": null,
+      "status": ""
+    },
+    {
+      "name": "watchdog_timeout",
+      "path": "axis0.config.watchdog_timeout",
+      "value": 0.0,
+      "expected": null,
+      "status": ""
+    },
+    {
+      "name": "brake_resistance",
+      "path": "config.brake_resistance",
+      "value": 0.0,
+      "expected": null,
+      "status": ""
+    },
+    {
+      "name": "dc_max_negative_current",
+      "path": "config.dc_max_negative_current",
+      "value": -3.0,
+      "expected": null,
+      "status": ""
+    },
+    {
+      "name": "dc_bus_overvoltage_trip",
+      "path": "config.dc_bus_overvoltage_trip_level",
+      "value": 26.0,
+      "expected": 26.0,
+      "status": "OK"
+    },
+    {
+      "name": "dc_bus_undervoltage_trip",
+      "path": "config.dc_bus_undervoltage_trip_level",
+      "value": 10.0,
+      "expected": 10.0,
+      "status": "OK"
+    }
+  ],
+  "drive": {
+    "pos_gain": 12.600000381469727,
+    "vel_gain": 0.22300000488758087,
+    "vel_integrator_gain": 0.0,
+    "vel_limit": 50.0,
+    "current_lim": 18.0,
+    "torque_constant": 0.06700000166893005,
+    "torque_lim": Infinity,
+    "control_mode": 3,
+    "input_mode": 1
+  },
+  "joint_kp": 100.61855354262529,
+  "joint_kd": 7.985599245742931,
+  "zeta": 2.6361556995026416,
+  "errors": []
+}

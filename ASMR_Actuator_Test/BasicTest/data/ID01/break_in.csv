@@ -1,0 +1,3 @@
+time,motor,minutes,cum_minutes,speed_turn_s,reverse_s,slow_start_Nm,slow_end_Nm,run_first_Nm,run_last_Nm,fet_max_C,stop
+20261105_222420,6512,20.46,20.46,10.0,30.0,0.4217,0.3897,0.4195,0.3934,32.3,
+20261106_120446,6512,60.16,80.62,10.0,30.0,0.3696,0.3648,0.3751,0.357,33.4,

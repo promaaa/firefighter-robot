@@ -1,0 +1,5 @@
+# 수업 로봇 모델(All rights reserved): python fetch_model.py 로 받는다
+assets/asmr2026-humanoid-v1/
+
+# 노트북마다 다른 설정 (COM 포트, 영점). 처음 저장할 때 만들어진다
+config/robot_config.json

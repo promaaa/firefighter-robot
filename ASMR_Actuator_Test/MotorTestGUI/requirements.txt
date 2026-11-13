@@ -1,0 +1,8 @@
+# BasicTest와 같은 가상환경(%USERPROFILE%\odrv051, Python 3.12)에 추가로 설치
+#   PowerShell:  & "$env:USERPROFILE\odrv051\Scripts\Activate.ps1"
+#   cmd:         %USERPROFILE%\odrv051\Scripts\activate
+#   pip install -r requirements.txt
+# CAN 쪽(python-can, pyserial, gs_usb, libusb-package)은 ..\BasicTest\requirements.txt로 이미 설치됨
+PySide6-Essentials    # Qt GUI (WebEngine 없는 가벼운 판). 2026-11-10 설치: 6.12.0
+pyqtgraph             # 실시간 그래프. 0.14.0
+mujoco                # 시뮬레이션 + 3D 렌더링. 4.0.0

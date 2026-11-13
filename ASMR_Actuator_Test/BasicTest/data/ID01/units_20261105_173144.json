@@ -1,0 +1,30 @@
+{
+  "id": "03",
+  "motor": "6512",
+  "p0_turn": 0.25576031873673954,
+  "results": [
+    {
+      "cmd_deg": 10.0,
+      "enc_deg": 9.7544,
+      "max_jump_turn": 0.01573,
+      "measured_deg": null,
+      "direction": ""
+    },
+    {
+      "cmd_deg": 0.0,
+      "enc_deg": 0.3046,
+      "max_jump_turn": 0.01047
+    },
+    {
+      "cmd_deg": 90.0,
+      "enc_deg": 89.6815,
+      "max_jump_turn": 0.01402,
+      "measured_deg": null
+    },
+    {
+      "cmd_deg": 0.0,
+      "enc_deg": 0.3035,
+      "max_jump_turn": 0.11919
+    }
+  ]
+}
