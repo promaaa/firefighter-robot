@@ -17,6 +17,21 @@ Team SOBANG · Seoul National University · ASMR 2026 · final demo on 10 Decemb
 
 [Design](docs/design.md) &nbsp;·&nbsp; [Run it on the robot](docs/board_setup.md)
 
+<table>
+  <tr>
+    <td width="33%"><img src="docs/img/render-front.jpg" alt="Render of Sobang-I from the front left: red printed legs with black actuators, black feet, an aluminium torso frame with two clear shelves, and a black camera on a tilt mount on top." width="100%"></td>
+    <td width="33%"><img src="docs/img/render-side.jpg" alt="Render of Sobang-I from the right side: the leg chain from the hip actuators to the foot under the torso, with the camera at the front of the top frame." width="100%"></td>
+    <td width="33%"><img src="docs/img/render-rear.jpg" alt="Render of Sobang-I from the rear right: the back of the torso with the battery holders and the computer, above the two legs." width="100%"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Front</sub></td>
+    <td align="center"><sub>Side</sub></td>
+    <td align="center"><sub>Rear</sub></td>
+  </tr>
+</table>
+
+<sub>Blender renders of the full CAD, <a href="cad/SOBANG-I_Full_Assembly.step">cad/SOBANG-I_Full_Assembly.step</a>. The real robot is not complete yet. We placed the camera module by hand, because its STL files have no position.</sub>
+
 </div>
 
 ## About
@@ -37,7 +52,7 @@ At the demo, the robot must find a candle, walk to it, aim and put it out.
 | Aiming and full missions | tested in simulation | All fires out in 8 of 50 random missions, 37 of 102 fires out. |
 | Water jet | tested in simulation | The model gives 9.6 m/s at the 1.0 mm nozzle, a reach of 2.7 to 5.1 m and 4.8 min of spray from a 2 L bag. |
 | Water trolley | planned | 2 L bag, pump and battery on a pushed pole, a hose to the fixed nozzle. |
-| Torso CAD for the trolley design | planned | The team is updating the CAD files. The old renders still show water in the torso. |
+| Torso CAD for the trolley design | planned | The full robot CAD is in [`cad/`](cad/). The camera module is in pull request 7 and has no position in the assembly yet. |
 | Real fire test, walking on the real robot | planned | |
 
 ## How it works
