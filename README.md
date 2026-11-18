@@ -125,7 +125,7 @@ To run the real robot, follow [docs/board_setup.md](docs/board_setup.md): SSH, i
 - **오상준**: hardware.
 - **Merwan Picout**: hardware.
 - **권오성**: software.
-- **김태환**: hardware.
+- **김태환** ([@kth02](https://github.com/kth02)): hardware.
 - **유동주**: hardware.
 - **이철희** ([@poiuy45987](https://github.com/poiuy45987)): software.
 - **이해우**: hardware.
