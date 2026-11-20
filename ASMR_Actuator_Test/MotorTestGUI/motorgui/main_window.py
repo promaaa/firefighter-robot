@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QHBoxLayout, Q
 
 from .render import OffscreenRenderer, RobotView, VIEW_PRESETS, apply_preset, copy_camera, new_camera
 from .theme import C, RGBA
+from .walk import STAGE_KO
 from .widgets import JointPanel, JointTable, TopBar
 
 FRAME_MS = 16
@@ -24,12 +25,16 @@ HELP_TEXT = """<h3>MotorTestGUI</h3>
 '영점·방향 설정' 탭 → <b>모든 관절 지금 = 0°</b> (다리를 곧게 편 자세에서), 또는 <b>범위 훑기</b>
 (시작 → 힘을 푼 채 관절을 양쪽 기구 끝까지 → 끝 → 결과 확인 후 적용).</li>
 <li>관절을 고르고 <b>토크 켜기</b> → <b>+5°</b>. 노란 화살표(회전축)와 호(+ 방향)를 보고, 실물이 왼쪽 그림처럼
-움직였는지 확인합니다. 반대면 힘 풀기 → 방향 −1.</li>
+움직였는지 확인합니다. 반대면 힘 풀기 → 방향 −1. 같은 쪽이면 방향 옆 <b>실물로 확인함</b>을 체크합니다.</li>
 <li>오른쪽 시뮬이 같은 쪽으로 같은 만큼 움직이는지, 그래프에서 실측(파랑)·목표(주황 점선)·시뮬(청록)을 비교합니다.
 토크 그래프의 부호가 반대면 '토크 부호(Iq)'를 바꿉니다.</li>
 <li>힘을 푼 채 손으로 관절을 끝까지 돌려 관절 표의 '실측 기록 범위'를 '시뮬 범위'와 비교합니다.</li>
 <li><b>설정 저장</b> (MotorTestGUI/config/robot_config.json).</li>
 </ol>
+<p><b>보행 테스트</b> (오른쪽 '보행 테스트' 탭): 하네스에 매단 로봇이 "저벅저벅" 걷는 동작을 합니다 (발 궤적 + 역기구학).
+12개 관절 연결·영점과 방향 '실물로 확인함'이 필요합니다. 걸음 속도(걸음/분)로 다리 움직임 빠르기를 정합니다. 시작 → 토크 켜기 → 준비 자세 → 걷기 → (정한 시간 또는 '천천히 멈추기') → 처음 자세 → 힘 풀기.
+Esc는 언제든 즉시 멈추고 모두 힘을 풉니다. 매 실행은 MotorTestGUI/logs/walk_날짜_시각/에 자동 기록됩니다.
+실물이 연결되지 않았으면 시뮬에서만 움직입니다.</p>
 <p><b>안전</b>: 한 번 명령은 '한 번 최대'(기본 30°)까지, 영점이 있으면 시뮬 관절 범위 안으로 자릅니다.
 <b>Esc</b> 또는 빨간 버튼 = 모든 노드 IDLE. 실제 비상 정지는 전원 차단 스위치로 하세요.</p>
 <p><b>각도 모호함</b>: 코스 펌웨어는 전원을 켤 때 모터 1회전(관절 24°) 안의 위치만 압니다. 노드가 처음 보일 때
@@ -297,6 +302,10 @@ class MainWindow(QMainWindow):
                     lines.append((C["uncal"], "보라 = 영점 없음 (각도가 시뮬 기준이 아님)"))
             if ghost is not None:
                 lines.append((C["target"], "주황 반투명 = 목표 자세 (실측과 다른 링크만)"))
+            wk = app.walk
+            if wk.active:
+                lines.append((C["real"], f"보행 테스트: {STAGE_KO.get(wk.stage(t), '')} · {wk.walked_s(t):.1f} s"
+                                         " · Esc = 즉시 모두 힘 풀기"))
             v.lines = lines
             j = app.cfg.joint(self.panel.name)
             q = app.real_q(self.panel.name)

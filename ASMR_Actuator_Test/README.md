@@ -1,6 +1,6 @@
 # ASMR Actuator Test
 
-Bench tests, drive setup records and a sim-vs-real GUI for the 12 leg actuators. The drives are MKS XDrive MINI boards running the course ODrive 0.5.1 "instant-start" firmware. Everything here runs on a Windows laptop, over USB for setup and over two CANable adapters for CAN.
+Bench tests, drive setup records and a sim-vs-real GUI for the 12 leg actuators. The drives are MKS XDrive MINI boards running the course ODrive 0.5.1 "instant-start" firmware. Everything here runs on a Windows laptop, over USB for setup and over two CANable adapters for CAN. The latency tests and the GUI's Radxa mode also run a small program on the ROCK 3C.
 
 This folder is a copy of [GeunYoung-Heo/SOBANG_MotorTest](https://github.com/GeunYoung-Heo/SOBANG_MotorTest), which keeps the full history and the raw logs left out here (see [Not in this folder](#not-in-this-folder)). The step-by-step guides are in Korean:
 
@@ -19,6 +19,10 @@ This folder is a copy of [GeunYoung-Heo/SOBANG_MotorTest](https://github.com/Geu
 | CAN with all 12 drives, left leg on one CANable and right leg on the other | measured on laptop | `python motor_test_gui.py` | 2026-11-13 |
 | Direction and zero of all 12 joints in MotorTestGUI; 11 joints move on command | measured on laptop | `python motor_test_gui.py` | 2026-11-13 |
 | Left knee (node 7) moves after an encoder offset calibration over CAN | measured on laptop | `python can_diag.py --channel COM16 --node 7 --calibrate-offset` | 2026-11-13 |
+| Walking motion in the harness: rule-based stepping gait in the 보행 테스트 (walking test) tab | measured on laptop | `python motor_test_gui.py` | before 2026-11-20 |
+| MotorTestGUI through the ROCK 3C (Radxa mode): all 12 heartbeats, polling at 50 Hz, encoder request to reply 4.7 ms | measured on board | `python motor_test_gui.py`, then check "Radxa 경유" (through Radxa) | 2026-11-20 |
+| Latency and joint response from the ROCK 3C: command to drive 0.5 ms, PD time constant = Kd/Kp, friction, armature, sine response ([results](results/real_actuator_20261120.md)) | measured on board | `python latency/latency.py run rtt\|loop\|step\|sine` | 2026-11-20 |
+| Left knee (node 7) follows commands without the CAN calibration | measured on board | `python latency/latency.py run step --joint left_knee_pitch` | 2026-11-20 |
 | Sim-vs-real comparison in MotorTestGUI | planned | | |
 | BasicTest and MotorTestGUI on the ROCK 3C | planned | | |
 
@@ -30,7 +34,10 @@ This folder is a copy of [GeunYoung-Heo/SOBANG_MotorTest](https://github.com/Geu
 | `BasicTest/bench/` | Shared code: USB access with odrivetool, CAN Simple, motor parameters, joint table, simulated drive |
 | `BasicTest/data/IDxx/` | One folder per drive (`IDxx` = node xx): setup backups `xdrive_IDxx_after_setup_*.json`, measurement logs and plots |
 | `BasicTest/analysis/` | Break-in report of all 12 actuators: script, figures, tables |
-| `MotorTestGUI/` | PySide6 + MuJoCo GUI. Left: the real robot from CAN encoder readings. Center: MuJoCo with the same target trajectory. Right: joint jog with guards, plots, direction and zero setting. One or two CAN buses. |
+| `MotorTestGUI/` | PySide6 + MuJoCo GUI. Left: the real robot from CAN encoder readings. Center: MuJoCo with the same target trajectory. Right: joint jog with guards, plots, direction and zero setting, and a walking test (rule-based stepping gait in a harness). One or two CAN buses, on the laptop or through the ROCK 3C. |
+| `MotorTestGUI/radxa/` | Programs that run on the ROCK 3C, standard library only: `can_bridge.py` (CAN relay for the GUI's Radxa mode; it sets every drive it has seen idle when the laptop is silent for 0.5 s) and `latency_test.py` (latency and joint response tests) |
+| `MotorTestGUI/latency/` | `latency.py` copies the test to the ROCK 3C over SSH, runs it and analyses the logs. `fit_inertia.py` fits joint inertia and armature from the step logs. |
+| `results/` | Measured results: [real_actuator_20261120.md](results/real_actuator_20261120.md) and the same values as JSON |
 
 ## Drive setup record
 
@@ -72,6 +79,8 @@ Checked on 2026-11-13.
 - Termination: fit the 120 Ω jumper on the CANable and on the last drive of each bus only. With the power off, the resistance between L and H at the CANable terminal should then be about 60 Ω. Measured: all jumpers off, about 12 kΩ; one jumper at the foot drive, 120 Ω.
 
 ## Known issue: left knee encoder offset
+
+**Fixed.** The stored offset was fixed on 2026-11-17. On 2026-11-20 the knee followed step commands from the ROCK 3C without the CAN calibration. The notes below are kept in case it happens again.
 
 The left knee (node 7) turns freely when idle and its angle reads correctly. A position command, however, only makes the motor twitch: Iq rises to about 17 A and the MotorTestGUI guard stops the joint.
 
@@ -135,3 +144,4 @@ On first start, MotorTestGUI offers to download the course Robot Model v1 (MJCF 
 - Five raw stiffness logs larger than 1 MB (ID01, ID02, 2026-11-05 and 11-06). They are in [SOBANG_MotorTest](https://github.com/GeunYoung-Heo/SOBANG_MotorTest/tree/main/BasicTest/data).
 - `BasicTest/tools/`: Zadig and the course firmware `.hex` and `.elf` (GPL-3.0). Download them from the links above.
 - Zip archives that duplicate `BasicTest/data`.
+- The raw logs of the latency tests (16 MB, `MotorTestGUI/logs/latency/`). They stay on the measuring laptop; [the results page](results/real_actuator_20261120.md) lists each folder and the command that made it.

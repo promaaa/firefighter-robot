@@ -13,6 +13,7 @@ from .can_link import CanLink
 from .commander import Commander
 from .config import TURN_TO_JOINT_DEG
 from .sim import SimRobot, joint_infos, load_model
+from .walk import WalkTest
 from . import protocol as P
 
 TARGET_HIST_LEN = 4000
@@ -40,6 +41,7 @@ class App:
         self.sweep_t0 = 0.0
         self._follow = {}
         self._sim_hold = {}
+        self.walk = WalkTest(self)             # 보행 테스트 (규칙 기반)
         self.log(f"모델: {mjcf_path} ({self.model_note})")
         missing = [n for n, i in self.infos.items() if i is None]
         if missing:
@@ -101,6 +103,7 @@ class App:
 
     # ------------------------------------------------------------------ 매 프레임
     def update(self):
+        self.walk.update()
         t = self.now()
         # 실물 자세 (연결 안 된 관절은 0)
         for name, info in self.infos.items():
@@ -143,6 +146,13 @@ class App:
         if isinstance(channels, str):
             channels = [channels]
         channels = [c for c in (channels or []) if c] or [""]
+        if interface == "radxa":         # Radxa 경유: channels[0] = SSH 별칭·주소. CANable은 Radxa가 찾음
+            host = channels[0].strip() or self.cfg.radxa_host or "radxa"
+            self.cfg.radxa_enabled, self.cfg.radxa_host, self.cfg.can_bitrate = True, host, int(bitrate)
+            self.link.start("radxa", [host], bitrate, self.cfg.poll_hz)
+            return None
+        if interface != "virtual":
+            self.cfg.radxa_enabled = False
         if len(channels) > 2:
             return "CAN 포트는 두 개까지 씁니다"
         if len(channels) == 2 and channels[0].upper() == channels[1].upper():
@@ -159,6 +169,8 @@ class App:
         return None
 
     def disconnect(self):
+        if self.walk.active:
+            self.walk.abort("연결 끊기")
         if self.sweep_active:
             self.sweep_cancel()
         if self.link.connected and self.any_real_enabled():
@@ -177,7 +189,16 @@ class App:
     def _use_real(self, name):
         return self.send_real and self.link.connected
 
+    def _walk_busy(self):
+        """보행 테스트 중이면 다른 명령을 막는 이유 문자열."""
+        if self.walk.active:
+            return "보행 테스트 중입니다 ('보행 테스트' 탭의 '천천히 멈추기' 또는 Esc 모두 힘 풀기 후에)"
+        return None
+
     def enable(self, name):
+        busy = self._walk_busy()
+        if busy:
+            return busy
         j = self.cfg.joint(name)
         t = self.now()
         if self._use_real(name):
@@ -213,14 +234,19 @@ class App:
         self.log(f"{j.short}: 에러 지우기 요청")
         return None
 
-    def idle_all(self):
+    def idle_all(self, reason="모두 힘 풀기 (Esc / 빨간 버튼)"):
+        """모든 노드 IDLE + 모든 목표 지움. 보행 테스트 중이면 보행도 바로 끝난다 (IDLE을 먼저 보냄)."""
         if self.link.connected:
             self.link.send_idle_all()
+        self.walk.on_idle_all(reason)
         self.cmdr.clear_all()
-        self.log("모두 힘 풀기")
+        self.log(f"모두 힘 풀기 ({reason})" if not reason.startswith("모두 힘 풀기") else reason)
 
     def _check_move(self, name, q_to):
         """(q_to_clamped, 오류 메시지, 안내 메시지)"""
+        busy = self._walk_busy()
+        if busy:
+            return None, busy, None
         j = self.cfg.joint(name)
         info = self.infos.get(name)
         tg = self.cmdr.get(name)
@@ -274,6 +300,9 @@ class App:
     # ------------------------------------------------------------------ 영점·방향
     def set_angle_here(self, name, deg):
         """지금 실측 위치를 관절 각도 deg로 정의 (zero_turn 계산)."""
+        busy = self._walk_busy()
+        if busy:
+            return busy
         j = self.cfg.joint(name)
         ns = self.link.nodes[j.node]
         if ns.pos is None or not ns.online(self.now()):
@@ -298,13 +327,41 @@ class App:
         d = -1 if d < 0 else 1
         if d == j.direction:
             return None
+        busy = self._walk_busy()
+        if busy:
+            return busy
         if self.cmdr.get(name) is not None and self.cmdr.get(name).real:
             return f"{j.short}: 토크가 켜진 동안에는 방향을 바꾸지 않습니다 (먼저 '힘 풀기')"
         j.direction = d
+        j.dir_checked = None          # 방향을 바꿨으니 실물로 다시 확인해야 함
         self.range_rec[name] = [math.inf, -math.inf]
         self.dirty = True
-        self.log(f"{j.short}: 방향 {d:+d}. 영점을 0° 자세에서 잡았다면 그대로 맞고, 다른 각도에서 잡았다면 다시 잡으세요")
+        self.log(f"{j.short}: 방향 {d:+d}. 영점을 0° 자세에서 잡았다면 그대로 맞고, 다른 각도에서 잡았다면 다시 잡으세요. "
+                 "+5° 시험으로 확인한 뒤 '실물로 확인함'을 체크하세요")
         return None
+
+    def set_dir_checked(self, name, on):
+        """실물 +5° 시험으로 방향이 시뮬과 같은 것을 확인했다는 표시 (설정 파일에 날짜로 저장)."""
+        j = self.cfg.joint(name)
+        new = time.strftime("%Y-%m-%d") if on else None
+        if (j.dir_checked is not None) == bool(on):
+            return None
+        j.dir_checked = new
+        self.dirty = True
+        self.log(f"{j.short}: 방향 {j.direction:+d} " + ("실물로 확인함" if on else "확인 표시 지움"))
+        return None
+
+    def check_all_dirs(self):
+        today = time.strftime("%Y-%m-%d")
+        n = 0
+        for j in self.cfg.joints:
+            if j.dir_checked is None:
+                j.dir_checked = today
+                n += 1
+        if n:
+            self.dirty = True
+        self.log(f"모든 관절 방향 실물로 확인함 표시 ({n}개 새로)")
+        return n
 
     def set_torque_sign(self, name, s):
         j = self.cfg.joint(name)
@@ -318,6 +375,9 @@ class App:
         self.dirty = True
 
     def clear_zero(self, name):
+        busy = self._walk_busy()
+        if busy:
+            return busy
         j = self.cfg.joint(name)
         if self.cmdr.get(name) is not None and self.cmdr.get(name).real:
             return f"{j.short}: 토크가 켜진 동안에는 영점을 지우지 않습니다"
@@ -353,6 +413,9 @@ class App:
     SWEEP_SPAN_TOL_DEG = 3.0     # 기록 폭과 기구 끝 사이 폭의 차이가 이 안이면 '일치'
 
     def sweep_start(self):
+        busy = self._walk_busy()
+        if busy:
+            return busy
         if not self.link.connected:
             return "실물 로봇에 연결되어 있지 않습니다"
         if self.sweep_active:
@@ -459,6 +522,9 @@ class App:
 
     # ------------------------------------------------------------------ 시뮬
     def sync_sim_to_real(self):
+        if self._walk_busy():
+            self.log("보행 테스트 중이라 시뮬 자세를 옮기지 않음")
+            return
         pose = {n: self.real_q(n) for n in self.cfg.names}
         n_ok = sum(q is not None for q in pose.values())
         self.sim.set_pose(pose)
@@ -470,6 +536,9 @@ class App:
         self.log(f"시뮬 자세를 실물에 맞춤 ({n_ok}개 관절)")
 
     def reset_sim(self):
+        if self._walk_busy():
+            self.log("보행 테스트 중이라 시뮬을 초기화하지 않음")
+            return
         for n in self.cfg.names:
             tg = self.cmdr.get(n)
             if tg is not None and not tg.real:

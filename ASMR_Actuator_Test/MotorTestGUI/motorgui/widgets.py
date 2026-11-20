@@ -5,7 +5,8 @@ from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                QDoubleSpinBox, QFrame,
-                               QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QMessageBox, QSizePolicy,
+                               QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox,
+                               QSizePolicy,
                                QPushButton, QRadioButton, QScrollArea, QSplitter, QTableWidget, QTableWidgetItem,
                                QTabWidget, QToolButton, QVBoxLayout, QWidget)
 
@@ -13,6 +14,7 @@ from . import protocol as P
 from .config import TURN_TO_JOINT_DEG, driver_joint_gains
 from .plots import JointPlots
 from .theme import C, dot_icon
+from .walk import LOG_DIR, MAX_DPS as WALK_MAX_DPS, STAGE_KO, WARN_DPS as WALK_WARN_DPS, WalkParams, open_folder
 
 CANABLE_VIDPID = (0x16D0, 0x117E)
 
@@ -126,8 +128,19 @@ class TopBar(QFrame):
         self.connect_btn = QPushButton("연결")
         self.connect_btn.setObjectName("primary")
         self.connect_btn.setMinimumWidth(70)
+        self.radxa_chk = QCheckBox("Radxa 경유")
+        self.radxa_chk.setToolTip("켜면 CANable을 Radxa(로봇 온보드 PC)에 꽂고, 이 PC는 랜선으로 Radxa를 거쳐 통신합니다.\n"
+                                  "연결할 때 SSH로 중계 프로그램(radxa/can_bridge.py)을 Radxa에 복사·실행합니다.\n"
+                                  "Radxa의 CANable은 자동으로 찾습니다 (포트 칸은 쓰지 않음).")
+        self.radxa_host = QLineEdit()
+        self.radxa_host.setPlaceholderText("radxa")
+        self.radxa_host.setMaximumWidth(120)
+        self.radxa_host.setToolTip("SSH 별칭이나 주소 (기본 radxa = rock-3c.local). 이 PC에 SSH 키가 등록돼 있어야 합니다.\n"
+                                   "이미 --listen으로 실행 중인 중계에 바로 붙으려면 tcp://IP:PORT")
         grid.addWidget(_label("CAN 어댑터", "muted"), 0, 0)
-        grid.addWidget(self.iface, 0, 1, 1, 4)
+        grid.addWidget(self.iface, 0, 1, 1, 2)
+        grid.addWidget(self.radxa_chk, 0, 3)
+        grid.addWidget(self.radxa_host, 0, 4)
         grid.addWidget(_label("포트 1·2", "muted"), 1, 0)
         grid.addWidget(self.channel, 1, 1)
         grid.addWidget(self.channel2, 1, 2)
@@ -187,15 +200,30 @@ class TopBar(QFrame):
         self.refresh_btn.clicked.connect(lambda: self.refresh_ports(keep=True))
         self.connect_btn.clicked.connect(self._connect_clicked)
         self.estop.clicked.connect(self.estop_requested.emit)
+        self.radxa_chk.toggled.connect(self._radxa_toggled)
 
         cfg = app.cfg
         i = self.iface.findData(cfg.can_interface)
         self.iface.setCurrentIndex(max(0, i))
         bi = self.bitrate.findData(cfg.can_bitrate)
         self.bitrate.setCurrentIndex(max(0, bi))
+        self.radxa_host.setText(cfg.radxa_host)
         self._iface_changed()
+        self.radxa_chk.setChecked(cfg.radxa_enabled and cfg.can_interface != "virtual")
+
+    def _radxa_toggled(self, on):
+        if on:
+            self.channel.clear()
+            self.channel2.clear()
+            self.channel.addItem("(Radxa에서 자동)", "")
+            self.channel2.addItem("(Radxa에서 자동)", "")
+        else:
+            self._iface_changed()
+        self.refresh()
 
     def _iface_changed(self):
+        if self.radxa_chk.isChecked():
+            return
         kind = self.iface.currentData()
         self.channel.clear()
         self.channel2.clear()
@@ -278,6 +306,10 @@ class TopBar(QFrame):
         if self.app.link.running:
             self.disconnect_requested.emit()
             return
+        if self.radxa_chk.isChecked():
+            host = self.radxa_host.text().strip() or "radxa"
+            self.connect_requested.emit("radxa", [host], int(self.bitrate.currentData()))
+            return
         ch1, ch2 = self._channel_value(self.channel), self._channel_value(self.channel2)
         chans = [ch1] + ([ch2] if ch2 else [])
         self.connect_requested.emit(self.iface.currentData(), chans, int(self.bitrate.currentData()))
@@ -291,15 +323,23 @@ class TopBar(QFrame):
                 "disconnected": "연결 안 됨"}[st]
         if st == "connected" and link.virtual is not None:
             text = "연결됨 (가상)"
+        elif st == "connected" and link.radxa is not None:
+            text = "연결됨 (Radxa 경유)"
         self.state_lbl.setText(f"<span style='color:{col}'>●</span> 실물 로봇 {text}")
         self.state_detail.setText(link.message if st != "connected" else link.descr)
         self.state_detail.setToolTip(link.message)
         running = link.running
         self.connect_btn.setText("끊기" if running else "연결")
-        for w in (self.iface, self.bitrate, self.refresh_btn):
-            w.setEnabled(not running and (w is self.iface or self.iface.currentData() != "virtual"))
-        self.channel.setEnabled(not running and self.iface.currentData() != "virtual")
-        self.channel2.setEnabled(not running and self.iface.currentData() != "virtual")
+        radxa = self.radxa_chk.isChecked()
+        local = not running and not radxa
+        virtual = self.iface.currentData() == "virtual"
+        self.iface.setEnabled(local)
+        self.refresh_btn.setEnabled(local and self.iface.currentData() == "slcan")
+        self.bitrate.setEnabled(not running and (radxa or not virtual))
+        self.channel.setEnabled(local and not virtual)
+        self.channel2.setEnabled(local and not virtual)
+        self.radxa_chk.setEnabled(not running and not virtual)
+        self.radxa_host.setEnabled(not running and radxa)
         for name, b in self.leds.items():
             colr, short = joint_state(app, name)
             j = app.cfg.joint(name)
@@ -333,8 +373,10 @@ class TopBar(QFrame):
                 busl = " · ".join(f"버스{i + 1} {100 * x:.0f}% ({cnt[i]}개)" for i, x in enumerate(loads))
             else:
                 busl = f"버스 약 {100 * loads[0]:.0f}%"
+            rtt = s.get("rtt_ms")
+            via = f" · Radxa 왕복 {rtt:.1f} ms" if rtt is not None else ""
             self.stats_lbl.setText(f"노드 {n_on}/{len(link.nodes)} · 폴링 {s['poll_hz']:.0f} Hz · "
-                                   f"수신 {s['rx_fps']:.0f}/s · {busl}{lat}"
+                                   f"수신 {s['rx_fps']:.0f}/s · {busl}{lat}{via}"
                                    + (f" · 송신 실패 {s['tx_err']}" if s['tx_err'] else "") + unk)
         else:
             self.stats_lbl.setText("")
@@ -362,7 +404,8 @@ class JointTable(QTableWidget):
         self.verticalHeader().setDefaultSectionSize(22)
         tips = {6: "실측 각도 − 시뮬 각도. 같은 목표를 받았는데 크게 다르면 방향·영점·게인·마찰을 확인",
                 8: "이번에 기록한 실측 최소~최대. 손으로 관절을 끝까지 돌려 보면 실물 범위와 시뮬 범위를 비교할 수 있음",
-                9: "영점(zero_turn)이 있으면 '보정', 없으면 '미보정'(절대 각도 명령 불가)"}
+                9: "영점(zero_turn)이 있으면 '보정', 없으면 '미보정'(절대 각도 명령 불가)",
+                10: "설정 파일의 방향. ✓ = 실물로 확인함 (보행 테스트는 12개 모두 ✓여야 시작)"}
         for c, t in tips.items():
             self.horizontalHeaderItem(c).setToolTip(t)
         self.rows = {}
@@ -453,7 +496,7 @@ class JointTable(QTableWidget):
             else:
                 self._set(r, 8, "—", blank, "")
             self._set(r, 9, "보정" if j.calibrated else "미보정", C["good"] if j.calibrated else C["uncal"])
-            self._set(r, 10, f"{j.direction:+d}")
+            self._set(r, 10, f"{j.direction:+d}" + (" ✓" if j.dir_checked else ""))
             ns = app.link.nodes[j.node]
             on = ns.online(t)
             self._set(r, 11, "—" if ns.iq is None or not on else f"{ns.iq:+.2f}")
@@ -474,7 +517,7 @@ class JointTable(QTableWidget):
             self._set(r, 12, " · ".join(notes))
         if not self._sized:
             self.resizeColumnsToContents()
-            for c, w in ((1, 74), (3, 62), (4, 62), (5, 62), (6, 80), (8, 120), (11, 60)):
+            for c, w in ((1, 74), (3, 62), (4, 62), (5, 62), (6, 80), (8, 120), (10, 64), (11, 60)):
                 self.setColumnWidth(c, max(self.columnWidth(c), w))
             self._sized = True
 
@@ -703,6 +746,7 @@ class JointPanel(QWidget):
         self.tabs = QTabWidget()
         self.tabs.addTab(_scroll(self._build_cmd_tab()), "명령")
         self.tabs.addTab(_scroll(self._build_cal_tab()), "영점·방향 설정")
+        self.tabs.addTab(_scroll(self._build_walk_tab()), "보행 테스트")
         self.tabs.setMinimumHeight(170)
         split.addWidget(self.tabs)
         split.setStretchFactor(0, 0)
@@ -880,7 +924,12 @@ class JointPanel(QWidget):
         self.dir_grp.addButton(self.dir_m, 2)   # Qt에서 id -1은 자동 번호라 2를 씀
         d.addWidget(self.dir_p)
         d.addWidget(self.dir_m)
-        d.addSpacing(20)
+        self.dir_chk = QCheckBox("실물로 확인함")
+        self.dir_chk.setToolTip("토크 켜기 → +5°에서 실물이 시뮬(오른쪽 3D)과 같은 쪽으로 움직이는 것을 봤으면 체크.\n"
+                                "설정 파일에 날짜로 남고, 보행 테스트는 12개 모두 체크돼 있어야 시작합니다.\n"
+                                "방향을 바꾸면 체크가 지워집니다.")
+        d.addWidget(self.dir_chk)
+        d.addSpacing(16)
         d.addWidget(_label("토크 부호(Iq)", "muted",
                            "드라이버 motor.config.direction. -1인 보드는 Iq 부호가 실제 토크와 반대 "
                            "(BasicTest/bench/odrv_usb.torque_sign). 그래프의 실측 토크에만 쓰입니다."))
@@ -967,8 +1016,11 @@ class JointPanel(QWidget):
         more = QPushButton("확인 순서 ?")
         more.setToolTip(CAL_HELP)
         more.clicked.connect(lambda: QMessageBox.information(self, "영점·방향 확인 순서", CAL_HELP))
+        self.dir_all_btn = QPushButton("방향 모두 확인함…")
+        self.dir_all_btn.setToolTip("12개 관절 모두 +5° 시험으로 방향을 확인했을 때 한 번에 표시")
         allrow.addWidget(self.zero_all_btn)
         allrow.addWidget(self.rewrap_all_btn)
+        allrow.addWidget(self.dir_all_btn)
         allrow.addWidget(more)
         allrow.addStretch(1)
         allrow.addWidget(self.save_btn)
@@ -979,6 +1031,8 @@ class JointPanel(QWidget):
         self.sweep_cancel_btn.clicked.connect(self._sweep_cancel)
 
         self.dir_grp.idClicked.connect(lambda i: self._do(app.set_direction, self.name, 1 if i == 1 else -1))
+        self.dir_chk.toggled.connect(lambda on: self._do(app.set_dir_checked, self.name, on))
+        self.dir_all_btn.clicked.connect(self._dir_all)
         self.ts_grp.idClicked.connect(lambda i: app.set_torque_sign(self.name, 1 if i == 1 else -1))
         self.zero_btn.clicked.connect(lambda: self._do(app.set_angle_here, self.name, self.zero_spin.value()))
         self.q0_btn.clicked.connect(lambda: self.zero_spin.setValue(0.0))
@@ -998,6 +1052,22 @@ class JointPanel(QWidget):
             return
         self.zero_spin.setValue(math.degrees(info.lo if which == 0 else info.hi))
         self._show("관절을 그 끝까지 손으로 돌려 둔 상태에서 '영점 정하기'를 누르세요", False)
+
+    def _dir_all(self):
+        missing = [j.short for j in self.app.cfg.joints if not j.dir_checked]
+        if not missing:
+            self._show("12개 관절 모두 이미 '실물로 확인함'입니다", False)
+            return
+        r = QMessageBox.question(
+            self, "방향 모두 확인함",
+            "아래 관절 모두, 토크를 켜고 +5°를 줬을 때 실물이 시뮬(오른쪽 3D)과\n"
+            "같은 쪽으로 움직이는 것을 확인했습니까?\n\n" + ", ".join(missing) +
+            "\n\n'예'를 누르면 '실물로 확인함'으로 표시합니다. 보행 테스트는 12개 모두 표시돼 있어야 시작합니다.\n"
+            "('설정 저장'을 눌러야 파일에 남습니다)")
+        if r != QMessageBox.Yes:
+            return
+        n = self.app.check_all_dirs()
+        self._show(f"방향 확인함 표시 {n}개. '설정 저장'을 눌러야 파일에 남습니다", False)
 
     def _zero_all(self):
         r = QMessageBox.question(self, "모든 관절 영점",
@@ -1060,6 +1130,228 @@ class JointPanel(QWidget):
         else:
             self.sweep_status.setText("실물 로봇에 연결하면 쓸 수 있습니다")
 
+    # ------------------------------------------------------------------ 보행 테스트 탭
+    def _build_walk_tab(self):
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setSpacing(6)
+        # 시연 중에 바로 보여야 하는 버튼·상태를 맨 위에, 설정은 그 아래
+        row = QHBoxLayout()
+        self.wk_start = QPushButton("▶ 보행 테스트 시작")
+        self.wk_start.setObjectName("primary")
+        self.wk_stop = QPushButton("천천히 멈추기")
+        self.wk_stop.setToolTip("진폭을 한 주기에 걸쳐 줄이고 처음 자세로 돌아갑니다 (비상시에는 Esc)")
+        self.wk_open = QPushButton("기록 폴더 열기")
+        self.wk_open.setToolTip(str(LOG_DIR))
+        row.addWidget(self.wk_start)
+        row.addWidget(self.wk_stop)
+        row.addStretch(1)
+        row.addWidget(self.wk_open)
+        v.addLayout(row)
+        self.wk_status = _label("", None)
+        self.wk_status.setWordWrap(True)
+        self.wk_status.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        v.addWidget(self.wk_status)
+        d = WalkParams()
+        g = QGridLayout()
+        g.setHorizontalSpacing(8)
+        g.setVerticalSpacing(4)
+
+        def spin(lo, hi, val, step, suffix, decimals=1, tip=None):
+            s = QDoubleSpinBox()
+            s.setRange(lo, hi)
+            s.setDecimals(decimals)
+            s.setSingleStep(step)
+            s.setValue(val)
+            s.setSuffix(suffix)
+            if tip:
+                s.setToolTip(tip)
+            return s
+
+        self.wk_cadence = spin(30, 80, d.steps_per_min, 5, " 걸음/분", 0,
+                               "1분에 몇 걸음 (한 발 = 한 걸음). 다리가 얼마나 빨리 움직이는지를 정합니다. 걷는 중에도 바꿀 수 있음")
+        self.wk_scale = spin(10, 130, d.scale * 100, 10, " %", 0,
+                             "보폭·발 높이·좌우·발목 동작에 곱하는 배율. 걷는 중에도 바꿀 수 있음")
+        self.wk_stride = spin(2, 16, d.stride_cm, 1, " cm", 1, "디딤 동안 발이 엉덩이 아래에서 앞→뒤로 미끄러지는 거리")
+        self.wk_lift = spin(0, 6, d.lift_cm, 0.5, " cm", 1, "흔듦 구간에 발을 드는 높이 (클수록 무릎을 높이 듦)")
+        self.wk_crouch = spin(15, 40, d.crouch_deg, 1, " °", 0,
+                              "기본 자세의 무릎 굽힘. 클수록 무릎을 굽힌 채 걷고, 보폭·발 높이 여유가 커짐")
+        self.wk_duty = spin(55, 75, d.duty * 100, 5, " %", 0,
+                            "한 다리가 땅을 딛는 시간 비율. 50%보다 크면 두 발이 같이 딛는 구간이 생김 (클수록 차분)")
+        self.wk_ankle = spin(0, 1, d.ankle_use, 0.1, "", 2, "0: 발바닥 늘 평평 / 1: 뒤꿈치 착지·발끝 밀기를 크게")
+        self.wk_sway = spin(0, 6, d.sway_deg, 0.5, " °", 1, "고관절 롤 ± (디딤 다리 쪽으로, 두 다리 같은 쪽). 발목 롤이 발바닥을 되돌림")
+        self.wk_dur = spin(0, 600, d.duration_s, 5, " s", 0, "걷는 시간. 0이면 '천천히 멈추기'를 누를 때까지")
+        self.wk_relax = QCheckBox("끝나면 처음 자세로 돌아와 모두 힘 풀기")
+        self.wk_relax.setChecked(d.end_relax)
+        self.wk_relax.setToolTip("끄면 처음 자세로 돌아온 뒤 토크를 켠 채 유지합니다")
+        rows = [("걸음 속도", self.wk_cadence, "진폭 배율", self.wk_scale),
+                ("보폭", self.wk_stride, "발 들기 높이", self.wk_lift),
+                ("무릎 기본 굽힘", self.wk_crouch, "디딤 비율", self.wk_duty),
+                ("발목 쓰기", self.wk_ankle, "좌우 흔들기 ±", self.wk_sway),
+                ("걷는 시간 (0 = 계속)", self.wk_dur, None, None)]
+        for r, (l1, w1, l2, w2) in enumerate(rows):
+            g.addWidget(_label(l1, "muted"), r, 0)
+            g.addWidget(w1, r, 1)
+            if w2 is not None:
+                g.addWidget(_label(l2, "muted"), r, 2)
+                g.addWidget(w2, r, 3)
+        g.addWidget(self.wk_relax, len(rows) - 1, 2, 1, 2)
+        g.setColumnStretch(1, 1)
+        g.setColumnStretch(3, 1)
+        v.addLayout(g)
+        self.wk_preview = _label("", None)
+        self.wk_preview.setWordWrap(True)
+        v.addWidget(self.wk_preview)
+        intro = _label("하네스에 매단 로봇이 \"저벅저벅\" 걷는 동작을 합니다 (규칙 기반, 시뮬도 같은 목표). 발목 위치 궤적을 정하고 "
+                       "역기구학으로 관절 각도를 구합니다: 디딤 구간에는 발이 땅에 붙은 듯 뒤로 미끄러지고, 흔듦 구간에는 발을 "
+                       "들어 앞으로 옮겨 내려놓습니다. 시작 → 토크 켜기 → 준비 자세 → 걷기 → 정한 시간 또는 '천천히 멈추기' → "
+                       "처음 자세 → 힘 풀기. 보호 정지·응답 끊김이 한 관절이라도 생기면 바로 모두 힘을 풉니다. "
+                       "관절 목표는 시뮬 기준이고, 실물에는 설정 파일의 방향·영점으로 바꿔 보냅니다. "
+                       "매 실행은 MotorTestGUI/logs/에 자동 기록됩니다.", "muted")
+        intro.setWordWrap(True)
+        v.addWidget(intro)
+        v.addStretch(1)
+
+        self.wk_start.clicked.connect(self._walk_start)
+        self.wk_stop.clicked.connect(lambda: self._do(self.app.walk.stop))
+        self.wk_open.clicked.connect(lambda: open_folder(self.app.walk.last_dir or LOG_DIR))
+        self.wk_cadence.valueChanged.connect(self._walk_live)
+        self.wk_scale.valueChanged.connect(self._walk_live)
+        for s in (self.wk_cadence, self.wk_scale, self.wk_stride, self.wk_lift, self.wk_crouch, self.wk_duty,
+                  self.wk_ankle, self.wk_sway):
+            s.valueChanged.connect(self._walk_preview)
+        self._walk_preview()
+        return w
+
+    def _walk_params(self):
+        return WalkParams(steps_per_min=self.wk_cadence.value(), stride_cm=self.wk_stride.value(),
+                          lift_cm=self.wk_lift.value(), crouch_deg=self.wk_crouch.value(),
+                          duty=self.wk_duty.value() / 100.0, ankle_use=self.wk_ankle.value(),
+                          sway_deg=self.wk_sway.value(), duration_s=self.wk_dur.value(),
+                          scale=self.wk_scale.value() / 100.0, end_relax=self.wk_relax.isChecked())
+
+    def _walk_preview(self, _=None):
+        """설정을 바꿀 때마다 한 주기를 미리 계산해 속도·범위를 보여 줌."""
+        wk = self.app.walk
+        p = self._walk_params()
+        r = wk.preview(p)
+        if r is None:
+            self.wk_preview.setText("")
+            return
+        pv, pj = r["peak_vel"]
+        col = C["critical"] if pv > WALK_MAX_DPS else C["warning"] if pv > WALK_WARN_DPS else C["ink2"]
+        text = (f"한 주기 {r['period']:.2f} s (왼발·오른발) · 가상 보행 속도 {r['speed_mps']:.2f} m/s "
+                f"({r['speed_mps'] * 3.6:.2f} km/h) · <span style='color:{col}'>관절 최고 속도 {pv:.0f}°/s "
+                f"({self.app.cfg.joint(pj).short})</span>")
+        probs = wk.check_params(p)
+        if probs:
+            text += f"<br><span style='color:{C['critical']}'>⚠ " + "<br>⚠ ".join(probs) + "</span>"
+        elif r["clipped"]:
+            text += (f"<br><span style='color:{C['warning']}'>관절 범위 끝에서 눌림: "
+                     + ", ".join(self.app.cfg.joint(n).short for n in r["clipped"]) + "</span>")
+        self.wk_preview.setText(text)
+
+    def _walk_live(self, _=None):
+        wk = self.app.walk
+        if not wk.active:
+            return
+        err = wk.set_live(steps_per_min=self.wk_cadence.value(), scale=self.wk_scale.value() / 100.0)
+        if err:
+            self._show(err, True)
+            for s, val in ((self.wk_cadence, wk.params.steps_per_min), (self.wk_scale, wk.params.scale * 100)):
+                s.blockSignals(True)
+                s.setValue(val)
+                s.blockSignals(False)
+            self._walk_preview()
+
+    def _walk_start(self):
+        app = self.app
+        real = app.send_real and app.link.connected
+        p = self._walk_params()
+        probs = app.walk.preflight(real) + app.walk.check_params(p)
+        if probs:
+            self._show("보행 테스트를 시작할 수 없습니다: " + " / ".join(probs), True)
+            return
+        dur = "멈출 때까지" if p.duration_s <= 0 else f"{p.duration_s:g} s"
+        summary = (f"걸음 속도 {p.steps_per_min:g} 걸음/분 (주기 {p.period_s:.2f} s) · 보폭 {p.stride_cm * p.scale:.1f} cm · "
+                   f"발 들기 {p.lift_cm * p.scale:.1f} cm · 무릎 기본 {p.crouch_deg:g}° · 걷는 시간 {dur}")
+        if real:
+            notes = app.walk.notes(True)
+            r = QMessageBox.warning(
+                self, "보행 테스트 시작",
+                "실물 로봇 12개 관절의 토크를 켜고 보행 동작을 시작합니다.\n\n"
+                "  • 로봇이 하네스에 매달려 있고, 발이 바닥·받침대에 닿지 않습니까?\n"
+                "  • 다리가 움직이는 범위 안에 사람·물건·케이블이 없습니까?\n"
+                "  • 전원 스위치가 손 닿는 곳에 있습니까?\n\n"
+                "비상시: Esc 또는 빨간 '모두 힘 풀기' = 즉시 멈추고 모든 관절 힘 풀기\n"
+                "(다리가 중력으로 떨어집니다).\n\n" + summary + "\n\n"
+                "관절 방향 (설정 파일, 12개 모두 실물로 확인함):\n" + app.walk.directions_text()
+                + ("\n\n⚠ " + "\n⚠ ".join(notes) if notes else ""),
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if r != QMessageBox.Yes:
+                return
+        err = app.walk.start(p, real)
+        if err:
+            self._show(err, True)
+            return
+        self._show(("보행 테스트 시작: 토크 켜기 → 준비 자세 → 걷기. " if real else
+                    "실물 없이 시뮬에서만 보행 동작을 시작합니다. ") + f"기록: logs/{app.walk.last_dir.name}", False)
+
+    def _refresh_walk(self, connected):
+        app = self.app
+        wk = app.walk
+        t = app.now()
+        active = wk.active
+        real = app.send_real and connected
+        self.wk_start.setEnabled(not active)
+        self.wk_stop.setEnabled(active)
+        for s in (self.wk_stride, self.wk_lift, self.wk_crouch, self.wk_duty, self.wk_ankle, self.wk_sway,
+                  self.wk_dur, self.wk_relax):
+            s.setEnabled(not active)
+        st = wk.stage(t)
+        if wk.state == "idle":
+            col = C["muted"]
+        elif active:
+            col = C["real"]
+        elif wk.state == "done":
+            col = C["good"]
+        else:
+            col = C["critical"]
+        lines = [f"<span style='color:{col}'>●</span> <b>{STAGE_KO.get(st, st)}</b>"
+                 + (f" ({'실물 + 시뮬' if wk.real else '시뮬만'})" if wk.state != "idle" else "")]
+        if active or wk.state == "idle":
+            lines[0] += (f"  <span style='color:{C['serious']}'><b>비상: Esc</b> 또는 빨간 버튼 = 즉시 모두 힘 풀기"
+                         "</span>")
+        if wk.state in ("running", "done", "aborted") and wk.plan is not None:
+            info = f"걸은 시간 {wk.walked_s(t):.1f} s · {wk.cycles(t):.1f} 주기"
+            if active and wk.plan.kind == "gait":
+                info += f" · 진폭 {wk.plan.amp(t) * 100:.0f}%"
+            lines.append(info)
+        if wk.logger is not None and wk.real:
+            e, ej = wk.logger.live["max_err"]
+            i, ij = wk.logger.live["max_iq"]
+            if ej or ij:
+                lines.append(f"최대 추종 오차 {e:.1f}° ({ej}) · 최대 |Iq| {i:.1f} A ({ij}) "
+                             f"<span style='color:{C['muted']}'>— 보호 정지 {app.cfg.guard_err_deg:g}° / "
+                             f"{app.cfg.guard_current_a:g} A</span>")
+        if wk.state == "aborted":
+            lines.append(f"<span style='color:{C['critical']}'>중단 이유: {wk.reason}</span>")
+        if wk.last_dir is not None:
+            lines.append(f"<span style='color:{C['muted']}'>기록: logs/{wk.last_dir.name}"
+                         f"{' (기록 중)' if wk.logger and not wk.logger.closed else ''}</span>")
+        if not active:
+            if real:
+                probs = wk.preflight(True)
+                notes = wk.notes(True)
+                lines.append(f"시작하면: <b>실물 12개 관절 + 시뮬</b>" + (
+                    "" if not probs else f"<br><span style='color:{C['warning']}'>⚠ " + "<br>⚠ ".join(probs)
+                    + "</span>") + (
+                    "" if not notes else f"<br><span style='color:{C['muted']}'>※ " + "<br>※ ".join(notes)
+                    + "</span>"))
+            else:
+                lines.append("시작하면: <b>시뮬만</b> (실물이 연결되지 않았거나 '명령' 탭의 '실물에 보내기'가 꺼짐)")
+        self.wk_status.setText("<br>".join(lines))
+
     # ------------------------------------------------------------------ 공통
     def _do(self, fn, *args):
         err = fn(*args)
@@ -1109,17 +1401,27 @@ class JointPanel(QWidget):
             grp.blockSignals(True)
             grp.button(1 if val > 0 else 2).setChecked(True)
             grp.blockSignals(False)
+        self._sync_dir_chk(j)
         self.ts_src.setText("(백업)" if j.torque_sign_src.startswith("백업") else f"({j.torque_sign_src})")
         self.ts_src.setToolTip(j.torque_sign_src)
         self.boot_spin.blockSignals(True)
         self.boot_spin.setValue(j.boot_ref_deg)
         self.boot_spin.blockSignals(False)
 
+    def _sync_dir_chk(self, j):
+        on = j.dir_checked is not None
+        if self.dir_chk.isChecked() != on:
+            self.dir_chk.blockSignals(True)
+            self.dir_chk.setChecked(on)
+            self.dir_chk.blockSignals(False)
+        self.dir_chk.setText(f"실물로 확인함 ({j.dir_checked})" if on else "실물로 확인함")
+
     def refresh(self):
         """5~10 Hz: 글자 값."""
         app = self.app
         name = self.name
         j = app.cfg.joint(name)
+        self._sync_dir_chk(j)        # 방향을 바꾸면 확인 표시가 지워짐
         ns = app.link.nodes[j.node]
         t = app.now()
         col, short = joint_state(app, name)
@@ -1173,6 +1475,16 @@ class JointPanel(QWidget):
         if self.send_real.isChecked() != app.send_real:
             self.send_real.setChecked(app.send_real)
         self._refresh_sweep(connected, use_real)
+        self._refresh_walk(connected)
+        if app.walk.active:     # 보행 중에는 관절별 명령·영점 변경을 막음 ('힘 풀기'는 그대로 → 보행 중단)
+            for b in [self.btn_on, self.btn_clear, self.rel_go, self.abs_go, self.abs_zero, self.zero_btn,
+                      self.clear_zero_btn, self.dir_p, self.dir_m, self.dir_chk, self.dir_all_btn,
+                      self.sweep_start_btn, self.zero_all_btn, self.send_real] + self.jog_btns:
+                b.setEnabled(False)
+        else:
+            self.send_real.setEnabled(True)
+            self.dir_chk.setEnabled(True)
+            self.dir_all_btn.setEnabled(True)
 
     def refresh_plots(self):
         self.plots.update_data(self.app.series(self.name, self.plots.window))

@@ -3,7 +3,8 @@
 물리는 같은 MJCF를 MuJoCo로 돌린다(몸통 고정, 중력 있음). 각 관절은 드라이버처럼 모터축 위치·속도 PD
 (코스 xdrive_config 게인, 전류 한계 18 A)로 움직인다. 실물을 흉내 내려고 감춘 값을 둔다:
   - 엔코더 원점: 코스 펌웨어처럼 부팅 때 pos_estimate가 0~1 turn 사이 아무 값 (관절 기준 24도마다 반복)
-  - 방향: flips에 넣은 관절은 모터 +가 시뮬 관절 -  (GUI의 방향 확인 연습용)
+  - 방향: 설정 파일의 direction이 맞다고 보고 그대로 흉내 낸다 (실물 설정으로 연습해도 시뮬과 같은 쪽으로 돎).
+    flips에 넣은 관절만 설정과 반대로 돈다 (설정이 틀린 관절 흉내, GUI의 방향 확인 연습용)
   - Iq 부호: 설정 파일의 torque_sign과 같게 (= 백업의 motor.config.direction)
   - CAN 버스: 채널을 두 개 주면 실물처럼 왼다리는 버스 1, 오른다리는 버스 2에만 있다
     (자기 버스로 온 요청에만 답하고, heartbeat도 자기 버스로만 보냄)
@@ -31,7 +32,8 @@ class _Axis:
         self.j = cfg_joint
         self.info = info
         m = params.MOTORS[cfg_joint.motor]
-        self.dir = -1.0 if flip else 1.0
+        # 모터 + 방향 = 설정의 direction (flip이면 그 반대: 설정이 틀린 관절)
+        self.dir = float(cfg_joint.direction) * (-1.0 if flip else 1.0)
         self.torque_sign = float(cfg_joint.torque_sign)
         self.pos_gain, self.vel_gain = m["course_gains"]
         self.kt = m["kt"]

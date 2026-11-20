@@ -105,6 +105,7 @@ class JointCfg:
     stop_lo_deg: float | None = None     # 기구 끝 (가동범위 훑기 영점에 씀)
     stop_hi_deg: float | None = None
     stop_src: str = ""
+    dir_checked: str | None = None       # 실물로 방향을 확인한 날짜 (방향을 바꾸면 지워짐). 보행 테스트가 확인함
 
     @property
     def short(self):
@@ -139,7 +140,8 @@ class JointCfg:
         return {"node": self.node, "motor": self.motor, "direction": self.direction,
                 "zero_turn": self.zero_turn, "boot_ref_deg": self.boot_ref_deg,
                 "torque_sign": self.torque_sign, "torque_sign_src": self.torque_sign_src,
-                "stop_lo_deg": self.stop_lo_deg, "stop_hi_deg": self.stop_hi_deg, "stop_src": self.stop_src}
+                "stop_lo_deg": self.stop_lo_deg, "stop_hi_deg": self.stop_hi_deg, "stop_src": self.stop_src,
+                "dir_checked": self.dir_checked}
 
 
 @dataclass
@@ -149,6 +151,8 @@ class RobotConfig:
     can_channel: str = ""             # 포트 1 (CANable 하나)
     can_channel2: str = ""            # 포트 2 (두 번째 CANable, 비우면 버스 1개)
     can_bitrate: int = params.CAN_BITRATE
+    radxa_enabled: bool = False       # Radxa 경유 (CANable은 Radxa에, PC는 LAN으로)
+    radxa_host: str = "radxa"         # SSH 별칭·주소 (또는 tcp://IP:PORT)
     poll_hz: float = 50.0
     mjcf: str = ""
     max_speed_dps: float = 30.0
@@ -204,6 +208,8 @@ class RobotConfig:
         cfg.can_channel = can.get("channel", cfg.can_channel)
         cfg.can_channel2 = can.get("channel2", cfg.can_channel2)
         cfg.can_bitrate = int(can.get("bitrate", cfg.can_bitrate))
+        cfg.radxa_enabled = bool(can.get("radxa", cfg.radxa_enabled))
+        cfg.radxa_host = str(can.get("radxa_host", cfg.radxa_host)) or "radxa"
         cfg.poll_hz = float(d.get("poll_hz", cfg.poll_hz))
         cfg.mjcf = d.get("mjcf", cfg.mjcf)
         mv = d.get("move", {})
@@ -234,6 +240,8 @@ class RobotConfig:
                 j.stop_lo_deg = None if lo is None else float(lo)
                 j.stop_hi_deg = None if hi is None else float(hi)
                 j.stop_src = jd.get("stop_src", "설정 파일")
+            dc = jd.get("dir_checked")
+            j.dir_checked = None if not dc else str(dc)
         return cfg
 
     def save(self, path=None):
@@ -243,7 +251,7 @@ class RobotConfig:
             "_설명": "MotorTestGUI 관절 설정. q[rad] = direction*(pos_estimate + k - zero_turn)*2pi/15, "
                     "k는 노드가 처음 보일 때 관절이 boot_ref_deg +-12도 안에 있다고 보고 정함.",
             "can": {"interface": self.can_interface, "channel": self.can_channel, "channel2": self.can_channel2,
-                    "bitrate": self.can_bitrate},
+                    "bitrate": self.can_bitrate, "radxa": self.radxa_enabled, "radxa_host": self.radxa_host},
             "poll_hz": self.poll_hz,
             "mjcf": self.mjcf,
             "move": {"max_speed_dps": self.max_speed_dps, "max_step_deg": self.max_step_deg,
