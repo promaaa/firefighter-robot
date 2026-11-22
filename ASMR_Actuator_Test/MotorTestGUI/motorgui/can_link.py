@@ -32,6 +32,7 @@ import can
 from bench import can_simple as cs
 
 from . import protocol as P
+from .config import RAD_PER_TURN
 
 HIST_LEN = 3000            # 50 Hz로 60 s
 OFFLINE_S = 0.6            # 이 시간 동안 아무것도 안 오면 연결 끊김
@@ -100,6 +101,7 @@ class CanLink:
         self._dup_warned = set()
         self.logs = deque(maxlen=1000)    # (t, text)
         self.virtual = None
+        self.radxa = None                 # Radxa 경유일 때 RadxaConnection (왕복 시간 등)
         self._q = queue.Queue()
         self._thread = None
         self._stop = threading.Event()
@@ -213,9 +215,25 @@ class CanLink:
         names = [ch or "(자동)" for ch in channels]
         return buses, names, f"{interface} {' + '.join(names)} · {bitrate // 1000} kbps"
 
+    def _open_radxa(self, host, bitrate):
+        """Radxa 경유: SSH로 중계 프로그램을 띄우고 Radxa의 CANable들을 버스로 받는다."""
+        from .radxa_link import RadxaConnection
+        self.state, self.message = "connecting", f"Radxa({host}) 접속 중… (중계 프로그램 복사·실행)"
+        conn = RadxaConnection(host, bitrate, log=self.log).start()
+        buses = conn.buses()
+        if not buses:
+            conn.close()
+            raise RuntimeError("Radxa에 CAN 장치가 없습니다 (CANable을 Radxa USB에 꽂았는지 확인)")
+        self.radxa = conn
+        names = [f"Radxa {b['name']}" for b in conn.info.get("buses", [])]
+        return buses, names, f"Radxa 경유 ({host}) · CAN {len(buses)}개 · {bitrate // 1000} kbps"
+
     def _run(self, interface, channels, bitrate, poll_hz, virtual_kwargs):
         try:
-            buses, names, descr = self._open(interface, channels, bitrate, virtual_kwargs)
+            if interface == "radxa":
+                buses, names, descr = self._open_radxa(channels[0] or "radxa", bitrate)
+            else:
+                buses, names, descr = self._open(interface, channels, bitrate, virtual_kwargs)
         except Exception as e:  # noqa: BLE001 - 어떤 어댑터 오류든 GUI에 보여 준다
             self.state, self.message = "error", f"연결 실패: {e}"
             self.log(self.message)
@@ -252,7 +270,8 @@ class CanLink:
                     loads = [b / span / rate for b in self._bits_bus]
                     self.stats = {"rx_fps": self._rx / span, "tx_fps": self._tx / span,
                                   "load": max(loads), "loads": loads,
-                                  "tx_err": self._tx_err, "poll_hz": self._ticks / span}
+                                  "tx_err": self._tx_err, "poll_hz": self._ticks / span,
+                                  "rtt_ms": None if self.radxa is None else self.radxa.rtt_ms}
                     self._rx = self._tx = self._bits = self._ticks = 0
                     self._bits_bus = [0] * len(buses)
                     t_stat = now_p
@@ -284,6 +303,9 @@ class CanLink:
                 except Exception:  # noqa: BLE001
                     pass
             self.buses = []
+            if self.radxa is not None:       # 버스를 다 닫으면 연결도 닫히지만, 열다 실패한 경우를 위해 한 번 더
+                self.radxa.close()
+                self.radxa = None
             self._stop_virtual()
             if self.state != "error":
                 self.state, self.message = "disconnected", "연결 끊음"
@@ -389,7 +411,10 @@ class CanLink:
                 continue
             if now <= tg.t_end + 0.1:
                 p = j.turn_from_q(tg.eval(now), ns.k)
-                ok &= self._send(j.node, cs.SET_INPUT_POS, P.pack_input_pos(p))
+                # 보행 테스트 목표는 속도도 알려 줌 → 속도 피드포워드로 추종 지연을 줄임 (다른 목표는 0)
+                vel = getattr(tg, "vel", None)
+                vff = j.direction * vel(now) / RAD_PER_TURN if vel is not None else 0.0
+                ok &= self._send(j.node, cs.SET_INPUT_POS, P.pack_input_pos(p, vff))
         # 2) 요청
         sel = self.selected_node
         for ns in self.nodes.values():

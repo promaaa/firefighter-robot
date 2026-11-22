@@ -97,6 +97,16 @@ The ranking below counts the shipped policy and f1_v1. f3_v1 trained with these 
 | 8 | Rotor inertia and friction | Swing test of the knee and the ankle pitch with `legs/sysid.py` | Ranges of the training |
 | 9 | Foot friction | Tilt a board with the demo floor material, a foot on it with a 2 kg load, until the foot slides. Friction = tan(angle). | 0.6 or more |
 
+### Results
+
+| Date | Measurement | Result | Status | Command |
+|---|---|---|---|---|
+| 2026-11-20 | 5, CAN part | On the ROCK 3C with two slcan CANables: encoder request to reply 1.73 ms (p95 2.2), all 12 joints 4.1 ms (p95 6.0), age of a reading 1.8 ms (p95 3.4). A command reaches the drive in about 0.5 ms. Reading 12 joints and sending 12 targets per tick works up to 150 Hz. The policy time is not included. | measured on board | `python latency/latency.py run rtt` and `run loop` in `ASMR_Actuator_Test/MotorTestGUI` |
+| 2026-11-20 | 8, part | Left knee, hip pitch and ankle pitch with the course drive gains (passthrough, Kp 100.6 / 71.6 N·m/rad, no integrator): the step response is first order with a time constant of Kd/Kp (79 ms, 50 ms), so the drive acts as the joint PD with those gains. Friction 0.30–0.37 N·m. Armature 0.022–0.034 kg·m² (knee) and 0.007–0.014 (ankle); the hip could not be fitted. | measured on board | `python latency/latency.py run step --joint left_knee_pitch --deg 4`, then `python latency/fit_inertia.py <step folders>` |
+| 2026-11-20 | Joint response | Left knee, ±4° sine target: at 2 Hz the joint reaches 0.69 of the amplitude, 53–58° late. The lag above the PD is about 4.5 ms plus half the command period. | measured on board | `python latency/latency.py run sine --joint left_knee_pitch --hz 50`, and `--hz 150` |
+
+Details, all runs and the values for a new simulation: [real_actuator_20261120.md](../../ASMR_Actuator_Test/results/real_actuator_20261120.md).
+
 ## Test stages
 
 Each stage has a pass criterion. Do not start a stage before the stage above it passes.
@@ -136,8 +146,8 @@ Film each test, and keep the log (joint angles, targets, IMU, bus voltage, tick 
 
 ## Not verified
 
-- **Not verified:** all numbers on this page come from the simulation. Nothing is measured on board yet.
+- **Not verified:** all numbers on this page come from the simulation, except the Results table under "Measurements, in this order".
 - **Not verified:** the gap study models gear play simply (a massless rotor) and applies the hose pull at the nozzle, backward only.
 - **Not verified:** the f3_v1 training and the gap study used the F3 model of 29 October (14.58 kg). The model now reads the CAD layout (14.60 kg, centre of mass 0.3 mm further back). We did not run them again.
 - **Not verified:** the training of f3_v1 has no gear play, no motor speed limit and no downward hose pull.
-- **Assumed:** the drive firmware applies the PD control at the joint as in the simulation (K and D at the joint, no integrator).
+- **Assumed:** the drive firmware applies the PD control at the joint as in the simulation (K and D at the joint, no integrator). The step tests of 2026-11-20 (Results) support this for the left knee, hip pitch and ankle pitch.

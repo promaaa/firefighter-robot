@@ -1,0 +1,687 @@
+{
+ "schema": "asmr-joint-measurement/1",
+ "measured_on": "2026-11-20",
+ "status": "measured on board",
+ "units": "joint side: rad, N*m, kg*m^2; times in ms",
+ "setup": {
+  "robot": "ASMR humanoid (course Robot Model v1), hanging in a harness",
+  "measured_joints": [
+   "leg_left_knee_pitch_joint (node 7)",
+   "leg_left_hip_pitch_joint (node 5)",
+   "leg_left_ankle_pitch_joint (node 11)"
+  ],
+  "other_joints": "idle",
+  "path": "ROCK 3C (Python 3.11) -> USB -> CANable V2.0 Pro (slcan firmware, one per leg) -> CAN 500 kbit/s -> MKS XDrive MINI (course ODrive 0.5.1 firmware, CAN Simple, RTR reads)",
+  "gear_ratio": 15,
+  "encoder": "AS5047P 14 bit on the motor shaft (cpr 16384)"
+ },
+ "drive_config": {
+  "6512": {
+   "motor": "MAD M6C12 150KV",
+   "joints": "hip roll/yaw/pitch, knee",
+   "pos_gain": 12.6,
+   "vel_gain": 0.223,
+   "vel_integrator_gain": 0.0,
+   "torque_constant_Nm_per_A": 0.067,
+   "current_lim_A": 18.0,
+   "vel_limit_motor_turn_per_s": 50.0,
+   "current_control_bandwidth_rad_per_s": 1000.0,
+   "encoder_bandwidth_rad_per_s": 3000.0,
+   "control_mode": "position (3)",
+   "input_mode": "passthrough (1)"
+  },
+  "5010": {
+   "motor": "MAD 5010 110KV",
+   "joints": "ankle pitch/roll",
+   "pos_gain": 20.0,
+   "vel_gain": 0.1,
+   "vel_integrator_gain": 0.0,
+   "torque_constant_Nm_per_A": 0.0836,
+   "current_lim_A": 18.0,
+   "vel_limit_motor_turn_per_s": 50.0,
+   "current_control_bandwidth_rad_per_s": 1000.0,
+   "encoder_bandwidth_rad_per_s": 3000.0,
+   "control_mode": "position (3)",
+   "input_mode": "passthrough (1)"
+  },
+  "conversion": "Kd = vel_gain * 15^2 / (2*pi) [N*m*s/rad], Kp = pos_gain * Kd [N*m/rad] (in ODrive 0.5.1 vel_gain is in N*m/(turn/s))"
+ },
+ "actuator_model": {
+  "equation": "tau = clip(Kp*(q_target - q) + Kd*(vel_ff - qdot), -tau_max, +tau_max); vel_ff = 0 unless sent",
+  "groups": {
+   "hip_knee_6512": {
+    "Kp": 100.6,
+    "Kd": 7.99,
+    "tau_max_Nm": 18.09,
+    "pd_time_constant_ms": 79.4,
+    "measured_time_constant_ms": [
+     74.7,
+     84.3
+    ],
+    "frictionloss_measured_Nm": [
+     0.3,
+     0.35
+    ],
+    "frictionloss_course_mjcf_Nm": 0.377,
+    "armature_measured_knee": [
+     0.022,
+     0.034
+    ],
+    "armature_measured_hip": null,
+    "armature_course_mjcf": 0.0228
+   },
+   "ankle_5010": {
+    "Kp": 71.6,
+    "Kd": 3.58,
+    "tau_max_Nm": 22.57,
+    "pd_time_constant_ms": 50.0,
+    "measured_time_constant_ms": [
+     42.6,
+     48.1
+    ],
+    "frictionloss_measured_Nm": [
+     0.37,
+     0.37
+    ],
+    "frictionloss_course_mjcf_Nm": 0.317,
+    "armature_measured": [
+     0.007,
+     0.014
+    ],
+    "armature_course_mjcf": 0.00556
+   }
+  },
+  "check": "Knee 8 deg step: Iq command right after the step 13.1-13.8 A; Kp*0.1396 rad/(15*0.067) predicts 14.0 A"
+ },
+ "delays_ms": {
+  "command_to_drive_target": {
+   "p50": 0.55,
+   "range": [
+    0.4,
+    1.0
+   ],
+   "note": "limited by the sample spacing; the true value is in this range"
+  },
+  "measured_current_follows": 2.0,
+  "command_to_motion_0p1deg": [
+   3.8,
+   6.2
+  ],
+  "fopdt_dead_time": [
+   2.75,
+   7.0
+  ],
+  "extra_lag_above_first_order_in_sine": {
+   "50Hz_commands": [
+    13.7,
+    17.7
+   ],
+   "150Hz_commands": [
+    7.7,
+    11.0
+   ],
+   "model": "about 4.5 ms + half the command period (zero-order hold)"
+  },
+  "encoder_request_to_reply": {
+   "p50": 1.734,
+   "p95": 2.215,
+   "max": 3.04
+  },
+  "read_all_12": {
+   "p50": 4.053,
+   "p95": 6.031,
+   "max": 7.066
+  },
+  "observation_age": {
+   "p50": 1.767,
+   "p95": 3.372,
+   "max": 5.51
+  },
+  "policy_compute": "not measured"
+ },
+ "control_loop": {
+  "max_sustainable_hz": 150,
+  "rates": [
+   {
+    "hz": 25,
+    "achieved_hz": 25.0,
+    "read_12_p50_ms": 5.148,
+    "read_12_p99_ms": 10.214,
+    "incomplete_frac": 0.0
+   },
+   {
+    "hz": 50,
+    "achieved_hz": 50.0,
+    "read_12_p50_ms": 3.864,
+    "read_12_p99_ms": 10.447,
+    "incomplete_frac": 0.0
+   },
+   {
+    "hz": 100,
+    "achieved_hz": 99.75,
+    "read_12_p50_ms": 3.866,
+    "read_12_p99_ms": 7.668,
+    "incomplete_frac": 0.0
+   },
+   {
+    "hz": 150,
+    "achieved_hz": 147.67,
+    "read_12_p50_ms": 3.74,
+    "read_12_p99_ms": 7.597,
+    "incomplete_frac": 0.0
+   },
+   {
+    "hz": 200,
+    "achieved_hz": 190.16,
+    "read_12_p50_ms": 4.445,
+    "read_12_p99_ms": 5.222,
+    "incomplete_frac": 0.1387
+   },
+   {
+    "hz": 300,
+    "achieved_hz": 189.35,
+    "read_12_p50_ms": 4.438,
+    "read_12_p99_ms": 5.353,
+    "incomplete_frac": 0.1034
+   },
+   {
+    "hz": 400,
+    "achieved_hz": 191.11,
+    "read_12_p50_ms": 4.419,
+    "read_12_p99_ms": 5.287,
+    "incomplete_frac": 0.1318
+   }
+  ],
+  "note": "each tick: read 12 joints (RTR) and send 12 targets; slcan, two buses at 500 kbit/s"
+ },
+ "step_results": [
+  {
+   "joint": "left_knee_pitch",
+   "step_deg": 4,
+   "n_steps": 20,
+   "folder": "20261120_125738_step_left_knee_pitch_4deg_pair",
+   "command": "python latency/latency.py run step --joint left_knee_pitch --deg 4 --n 10 --tag 4deg_pair",
+   "cmd_to_drive_target_ms_p50": 0.588,
+   "cmd_to_measured_current_ms_p50": 2.044,
+   "cmd_to_motion_0p1deg_ms_p50": 6.158,
+   "t10_ms_p50": 13.135,
+   "t50_ms_p50": 59.194,
+   "t90_ms_p50": 181.744,
+   "settle_5pct_ms_p50": 217.105,
+   "overshoot_frac_p50": 0.002,
+   "fopdt": {
+    "+": {
+     "dead_time_ms": 4.0,
+     "tau_ms": 80.9,
+     "rms_frac": 0.0071
+    },
+    "-": {
+     "dead_time_ms": 5.25,
+     "tau_ms": 74.7,
+     "rms_frac": 0.0074
+    }
+   },
+   "pd_time_constant_ms": 79.4,
+   "friction_torque_Nm": 0.319,
+   "end_error_bias_deg": -0.083,
+   "measured_current_peak_A": {
+    "+": -4.487,
+    "-": 4.672
+   }
+  },
+  {
+   "joint": "left_knee_pitch",
+   "step_deg": 8,
+   "n_steps": 20,
+   "folder": "20261120_125832_step_left_knee_pitch_8deg_pair",
+   "command": "python latency/latency.py run step --joint left_knee_pitch --deg 8 --n 10 --tag 8deg_pair",
+   "cmd_to_drive_target_ms_p50": 0.513,
+   "cmd_to_measured_current_ms_p50": 1.925,
+   "cmd_to_motion_0p1deg_ms_p50": 3.853,
+   "t10_ms_p50": 12.892,
+   "t50_ms_p50": 59.868,
+   "t90_ms_p50": 185.243,
+   "settle_5pct_ms_p50": 237.181,
+   "overshoot_frac_p50": 0.001,
+   "fopdt": {
+    "+": {
+     "dead_time_ms": 4.25,
+     "tau_ms": 77.8,
+     "rms_frac": 0.0043
+    },
+    "-": {
+     "dead_time_ms": 4.25,
+     "tau_ms": 79.3,
+     "rms_frac": 0.0032
+    }
+   },
+   "pd_time_constant_ms": 79.4,
+   "friction_torque_Nm": 0.296,
+   "end_error_bias_deg": -0.048,
+   "measured_current_peak_A": {
+    "+": -9.781,
+    "-": 10.153
+   }
+  },
+  {
+   "joint": "left_hip_pitch",
+   "step_deg": 4,
+   "n_steps": 20,
+   "folder": "20261120_130026_step_left_hip_pitch_4deg",
+   "command": "python latency/latency.py run step --joint left_hip_pitch --deg 4 --n 10 --tag 4deg",
+   "cmd_to_drive_target_ms_p50": 0.574,
+   "cmd_to_measured_current_ms_p50": 2.01,
+   "cmd_to_motion_0p1deg_ms_p50": 6.045,
+   "t10_ms_p50": 13.073,
+   "t50_ms_p50": 64.637,
+   "t90_ms_p50": 200.964,
+   "settle_5pct_ms_p50": 243.937,
+   "overshoot_frac_p50": 0.003,
+   "fopdt": {
+    "+": {
+     "dead_time_ms": 4.25,
+     "tau_ms": 84.3,
+     "rms_frac": 0.0104
+    },
+    "-": {
+     "dead_time_ms": 2.75,
+     "tau_ms": 84.3,
+     "rms_frac": 0.006
+    }
+   },
+   "pd_time_constant_ms": 79.4,
+   "friction_torque_Nm": 0.302,
+   "end_error_bias_deg": 0.078,
+   "measured_current_peak_A": {
+    "+": -4.49,
+    "-": 4.014
+   }
+  },
+  {
+   "joint": "left_hip_pitch",
+   "step_deg": 8,
+   "n_steps": 20,
+   "folder": "20261120_130100_step_left_hip_pitch_8deg",
+   "command": "python latency/latency.py run step --joint left_hip_pitch --deg 8 --n 10 --tag 8deg",
+   "cmd_to_drive_target_ms_p50": 0.544,
+   "cmd_to_measured_current_ms_p50": 2.033,
+   "cmd_to_motion_0p1deg_ms_p50": 4.008,
+   "t10_ms_p50": 13.174,
+   "t50_ms_p50": 65.401,
+   "t90_ms_p50": 180.987,
+   "settle_5pct_ms_p50": 220.601,
+   "overshoot_frac_p50": 0.002,
+   "fopdt": {
+    "+": {
+     "dead_time_ms": 7.0,
+     "tau_ms": 77.8,
+     "rms_frac": 0.0118
+    },
+    "-": {
+     "dead_time_ms": 4.5,
+     "tau_ms": 80.9,
+     "rms_frac": 0.0133
+    }
+   },
+   "pd_time_constant_ms": 79.4,
+   "friction_torque_Nm": 0.347,
+   "end_error_bias_deg": 0.137,
+   "measured_current_peak_A": {
+    "+": -9.48,
+    "-": 9.098
+   }
+  },
+  {
+   "joint": "left_ankle_pitch",
+   "step_deg": 4,
+   "n_steps": 20,
+   "folder": "20261120_125914_step_left_ankle_pitch_4deg",
+   "command": "python latency/latency.py run step --joint left_ankle_pitch --deg 4 --n 10 --tag 4deg",
+   "cmd_to_drive_target_ms_p50": 0.574,
+   "cmd_to_measured_current_ms_p50": 2.136,
+   "cmd_to_motion_0p1deg_ms_p50": 4.153,
+   "t10_ms_p50": 9.102,
+   "t50_ms_p50": 37.532,
+   "t90_ms_p50": 110.058,
+   "settle_5pct_ms_p50": 136.165,
+   "overshoot_frac_p50": 0.002,
+   "fopdt": {
+    "+": {
+     "dead_time_ms": 5.75,
+     "tau_ms": 42.6,
+     "rms_frac": 0.0095
+    },
+    "-": {
+     "dead_time_ms": 4.0,
+     "tau_ms": 48.1,
+     "rms_frac": 0.0057
+    }
+   },
+   "pd_time_constant_ms": 50.0,
+   "friction_torque_Nm": 0.368,
+   "end_error_bias_deg": 0.107,
+   "measured_current_peak_A": {
+    "+": -2.497,
+    "-": 2.128
+   }
+  },
+  {
+   "joint": "left_ankle_pitch",
+   "step_deg": 8,
+   "n_steps": 20,
+   "folder": "20261120_125950_step_left_ankle_pitch_8deg",
+   "command": "python latency/latency.py run step --joint left_ankle_pitch --deg 8 --n 10 --tag 8deg",
+   "cmd_to_drive_target_ms_p50": 0.574,
+   "cmd_to_measured_current_ms_p50": 1.969,
+   "cmd_to_motion_0p1deg_ms_p50": 3.767,
+   "t10_ms_p50": 8.995,
+   "t50_ms_p50": 38.957,
+   "t90_ms_p50": 111.966,
+   "settle_5pct_ms_p50": 155.339,
+   "overshoot_frac_p50": 0.001,
+   "fopdt": {
+    "+": {
+     "dead_time_ms": 4.25,
+     "tau_ms": 47.1,
+     "rms_frac": 0.0037
+    },
+    "-": {
+     "dead_time_ms": 4.25,
+     "tau_ms": 47.1,
+     "rms_frac": 0.0045
+    }
+   },
+   "pd_time_constant_ms": 50.0,
+   "friction_torque_Nm": 0.371,
+   "end_error_bias_deg": 0.07,
+   "measured_current_peak_A": {
+    "+": -4.822,
+    "-": 4.692
+   }
+  }
+ ],
+ "inertia_fit": [
+  {
+   "run": "20261120_125738_step_left_knee_pitch_4deg_pair",
+   "joint": "L knee pitch",
+   "dir": "+",
+   "amp_deg": 3.73584,
+   "J": 0.03183,
+   "link_J": 0.00955,
+   "armature_est": 0.02227,
+   "armature_mjcf": 0.0228,
+   "ti_ms": 0.3,
+   "Fc_Nm": 0.31922,
+   "rms_60ms_pct": 0.56139
+  },
+  {
+   "run": "20261120_125738_step_left_knee_pitch_4deg_pair",
+   "joint": "L knee pitch",
+   "dir": "-",
+   "amp_deg": 3.90957,
+   "J": 0.04007,
+   "link_J": 0.00955,
+   "armature_est": 0.03052,
+   "armature_mjcf": 0.0228,
+   "ti_ms": 0.3,
+   "Fc_Nm": 0.31922,
+   "rms_60ms_pct": 0.76952
+  },
+  {
+   "run": "20261120_125832_step_left_knee_pitch_8deg_pair",
+   "joint": "L knee pitch",
+   "dir": "+",
+   "amp_deg": 7.78559,
+   "J": 0.03183,
+   "link_J": 0.0096,
+   "armature_est": 0.02222,
+   "armature_mjcf": 0.0228,
+   "ti_ms": 0.3,
+   "Fc_Nm": 0.29633,
+   "rms_60ms_pct": 0.42385
+  },
+  {
+   "run": "20261120_125832_step_left_knee_pitch_8deg_pair",
+   "joint": "L knee pitch",
+   "dir": "-",
+   "amp_deg": 7.89279,
+   "J": 0.04327,
+   "link_J": 0.0096,
+   "armature_est": 0.03367,
+   "armature_mjcf": 0.0228,
+   "ti_ms": 0.3,
+   "Fc_Nm": 0.29633,
+   "rms_60ms_pct": 0.91012
+  },
+  {
+   "run": "20261120_125914_step_left_ankle_pitch_4deg",
+   "joint": "L ankle pitch",
+   "dir": "+",
+   "amp_deg": 3.8131,
+   "J": 0.01721,
+   "link_J": 0.0032,
+   "armature_est": 0.01401,
+   "armature_mjcf": 0.00556,
+   "ti_ms": 0.3,
+   "Fc_Nm": 0.36809,
+   "rms_60ms_pct": 0.7406
+  },
+  {
+   "run": "20261120_125914_step_left_ankle_pitch_4deg",
+   "joint": "L ankle pitch",
+   "dir": "-",
+   "amp_deg": 3.63914,
+   "J": 0.01005,
+   "link_J": 0.0032,
+   "armature_est": 0.00685,
+   "armature_mjcf": 0.00556,
+   "ti_ms": 1.19423,
+   "Fc_Nm": 0.36809,
+   "rms_60ms_pct": 1.54419
+  },
+  {
+   "run": "20261120_125950_step_left_ankle_pitch_8deg",
+   "joint": "L ankle pitch",
+   "dir": "+",
+   "amp_deg": 7.77344,
+   "J": 0.01476,
+   "link_J": 0.00318,
+   "armature_est": 0.01158,
+   "armature_mjcf": 0.00556,
+   "ti_ms": 0.3,
+   "Fc_Nm": 0.3716,
+   "rms_60ms_pct": 0.86576
+  },
+  {
+   "run": "20261120_125950_step_left_ankle_pitch_8deg",
+   "joint": "L ankle pitch",
+   "dir": "-",
+   "amp_deg": 7.67458,
+   "J": 0.01266,
+   "link_J": 0.00318,
+   "armature_est": 0.00948,
+   "armature_mjcf": 0.00556,
+   "ti_ms": 0.3,
+   "Fc_Nm": 0.3716,
+   "rms_60ms_pct": 0.92538
+  },
+  {
+   "run": "20261120_130026_step_left_hip_pitch_4deg",
+   "joint": "L hip pitch",
+   "dir": "+",
+   "amp_deg": 3.91591,
+   "J": 0.05449,
+   "link_J": 0.05908,
+   "armature_est": -0.00459,
+   "armature_mjcf": 0.0228,
+   "ti_ms": 0.3,
+   "Fc_Nm": 0.30186,
+   "rms_60ms_pct": 2.24863
+  },
+  {
+   "run": "20261120_130026_step_left_hip_pitch_4deg",
+   "joint": "L hip pitch",
+   "dir": "-",
+   "amp_deg": 3.75417,
+   "J": 0.02947,
+   "link_J": 0.05908,
+   "armature_est": -0.0296,
+   "armature_mjcf": 0.0228,
+   "ti_ms": 0.71138,
+   "Fc_Nm": 0.30186,
+   "rms_60ms_pct": 0.62275
+  },
+  {
+   "run": "20261120_130100_step_left_hip_pitch_8deg",
+   "joint": "L hip pitch",
+   "dir": "+",
+   "amp_deg": 7.94778,
+   "J": 0.06353,
+   "link_J": 0.05902,
+   "armature_est": 0.00451,
+   "armature_mjcf": 0.0228,
+   "ti_ms": 0.3,
+   "Fc_Nm": 0.34664,
+   "rms_60ms_pct": 2.34238
+  },
+  {
+   "run": "20261120_130100_step_left_hip_pitch_8deg",
+   "joint": "L hip pitch",
+   "dir": "-",
+   "amp_deg": 7.6659,
+   "J": 0.03183,
+   "link_J": 0.05902,
+   "armature_est": -0.0272,
+   "armature_mjcf": 0.0228,
+   "ti_ms": 0.3,
+   "Fc_Nm": 0.34664,
+   "rms_60ms_pct": 0.97566
+  }
+ ],
+ "sine_left_knee_4deg": {
+  "50": [
+   {
+    "freq_hz": 0.5,
+    "amp_ratio": 0.9318,
+    "phase_lag_deg": 19.04,
+    "time_lag_ms": 105.81
+   },
+   {
+    "freq_hz": 1.0,
+    "amp_ratio": 0.8598,
+    "phase_lag_deg": 33.42,
+    "time_lag_ms": 92.84
+   },
+   {
+    "freq_hz": 2.0,
+    "amp_ratio": 0.6896,
+    "phase_lag_deg": 57.66,
+    "time_lag_ms": 80.09
+   },
+   {
+    "freq_hz": 4.0,
+    "amp_ratio": 0.4086,
+    "phase_lag_deg": 84.4,
+    "time_lag_ms": 58.61
+   },
+   {
+    "freq_hz": 6.0,
+    "amp_ratio": 0.2875,
+    "phase_lag_deg": 101.15,
+    "time_lag_ms": 46.83
+   }
+  ],
+  "150": [
+   {
+    "freq_hz": 0.5,
+    "amp_ratio": 0.9367,
+    "phase_lag_deg": 17.87,
+    "time_lag_ms": 99.28
+   },
+   {
+    "freq_hz": 1.0,
+    "amp_ratio": 0.8629,
+    "phase_lag_deg": 31.03,
+    "time_lag_ms": 86.19
+   },
+   {
+    "freq_hz": 2.0,
+    "amp_ratio": 0.6883,
+    "phase_lag_deg": 52.85,
+    "time_lag_ms": 73.4
+   },
+   {
+    "freq_hz": 4.0,
+    "amp_ratio": 0.4168,
+    "phase_lag_deg": 74.59,
+    "time_lag_ms": 51.8
+   },
+   {
+    "freq_hz": 6.0,
+    "amp_ratio": 0.2983,
+    "phase_lag_deg": 88.11,
+    "time_lag_ms": 40.79
+   }
+  ]
+ },
+ "recommended_sim": {
+  "actuator": "joint torque PD with the Kp and Kd above; torque limit of the drive 18.09 / 22.57 N*m",
+  "physics_dt_ms": "2 or less (fast pole J/Kd is about 4 ms)",
+  "action_delay_ms": "policy compute + 0.5 to 2; hold the target until the next command",
+  "observation_delay_ms": "1 to 4 (p50 1.8, p95 3.4)",
+  "randomization": {
+   "pd_time_constant_scale": [
+    0.9,
+    1.1
+   ],
+   "frictionloss_Nm": [
+    0.25,
+    0.45
+   ],
+   "armature_hip_knee": [
+    0.018,
+    0.034
+   ],
+   "armature_ankle": [
+    0.0056,
+    0.014
+   ],
+   "action_delay_ms": [
+    0.5,
+    3.0
+   ],
+   "observation_delay_ms": [
+    1.0,
+    5.0
+   ]
+  },
+  "control_rate": "50 Hz works; 100 to 150 Hz cuts the hold delay from 10 ms to 3.3-5 ms; 150 Hz is the limit with slcan"
+ },
+ "caveats": [
+  "left leg, three joints, steps of 4 and 8 deg and a +-4 deg sine only; no torque saturation or velocity limit",
+  "robot in a harness with the other joints idle: the inertia fit includes torso and neighbour motion; no hip armature",
+  "slcan firmware; with candleLight + SocketCAN measure rtt and loop again (joint dynamics stay the same)",
+  "both knees rest about 2.5 deg beyond our zero towards extension (the CAD stop is 0 deg)",
+  "the 6 N*m training limit is a 3.4 deg error at Kp 100.6; the drives give up to 18 N*m (about 14 N*m in the 8 deg step)",
+  "policy compute time, bus voltage and temperature were not measured"
+ ],
+ "commands": {
+  "rtt": "python latency/latency.py run rtt",
+  "loop": "python latency/latency.py run loop",
+  "steps": [
+   "python latency/latency.py run step --joint left_knee_pitch --deg 4 --n 10 --tag 4deg_pair",
+   "python latency/latency.py run step --joint left_knee_pitch --deg 8 --n 10 --tag 8deg_pair",
+   "python latency/latency.py run step --joint left_hip_pitch --deg 4 --n 10 --tag 4deg",
+   "python latency/latency.py run step --joint left_hip_pitch --deg 8 --n 10 --tag 8deg",
+   "python latency/latency.py run step --joint left_ankle_pitch --deg 4 --n 10 --tag 4deg",
+   "python latency/latency.py run step --joint left_ankle_pitch --deg 8 --n 10 --tag 8deg"
+  ],
+  "sine": [
+   "python latency/latency.py run sine --joint left_knee_pitch --deg 4 --hz 50 --tag 50hz",
+   "python latency/latency.py run sine --joint left_knee_pitch --deg 4 --hz 150 --tag 150hz"
+  ],
+  "inertia_fit": "python latency/fit_inertia.py 20261120_125738_step_left_knee_pitch_4deg_pair 20261120_125832_step_left_knee_pitch_8deg_pair 20261120_130026_step_left_hip_pitch_4deg 20261120_130100_step_left_hip_pitch_8deg 20261120_125914_step_left_ankle_pitch_4deg 20261120_125950_step_left_ankle_pitch_8deg",
+  "where": "run in ASMR_Actuator_Test/MotorTestGUI on the laptop; latency.py copies the tool to the ROCK 3C and runs it there"
+ },
+ "raw_data": "ASMR_Actuator_Test/MotorTestGUI/logs/latency/<folder>/ on the measuring laptop (16 MB, not in git)"
+}

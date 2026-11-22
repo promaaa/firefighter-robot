@@ -53,6 +53,10 @@ class Commander:
         for n in self._t:
             self._t[n] = None
 
+    def set(self, name, target):
+        """다른 종류의 목표(보행 테스트의 GaitTarget 등)를 그대로 넣는다. eval/t_end/real/t_created가 있어야 함."""
+        self._t[name] = target
+
     def hold(self, name, q, t, real):
         self._t[name] = Target(q, q, t, 0.0, real)
         return self._t[name]
