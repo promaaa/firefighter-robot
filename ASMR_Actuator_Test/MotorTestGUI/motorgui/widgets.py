@@ -1,17 +1,20 @@
 """화면 구성 요소: 위쪽 연결 상태 줄, 관절 표, 오른쪽 관절 패널."""
 import math
 
+import numpy as np
 from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                QDoubleSpinBox, QFrame,
                                QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox,
-                               QSizePolicy,
+                               QSizePolicy, QSpinBox,
                                QPushButton, QRadioButton, QScrollArea, QSplitter, QTableWidget, QTableWidgetItem,
                                QTabWidget, QToolButton, QVBoxLayout, QWidget)
+import pyqtgraph as pg
 
 from . import protocol as P
 from .config import TURN_TO_JOINT_DEG, driver_joint_gains
+from .imu import AXIS_CHOICES, SENSOR_SHORT, axes_valid, gravity_body, roll_pitch_yaw
 from .plots import JointPlots
 from .theme import C, dot_icon
 from .walk import LOG_DIR, MAX_DPS as WALK_MAX_DPS, STAGE_KO, WARN_DPS as WALK_WARN_DPS, WalkParams, open_folder
@@ -747,6 +750,7 @@ class JointPanel(QWidget):
         self.tabs.addTab(_scroll(self._build_cmd_tab()), "명령")
         self.tabs.addTab(_scroll(self._build_cal_tab()), "영점·방향 설정")
         self.tabs.addTab(_scroll(self._build_walk_tab()), "보행 테스트")
+        self._imu_tab = self.tabs.addTab(_scroll(self._build_imu_tab()), "IMU 자세")
         self.tabs.setMinimumHeight(170)
         split.addWidget(self.tabs)
         split.setStretchFactor(0, 0)
@@ -1352,6 +1356,200 @@ class JointPanel(QWidget):
                 lines.append("시작하면: <b>시뮬만</b> (실물이 연결되지 않았거나 '명령' 탭의 '실물에 보내기'가 꺼짐)")
         self.wk_status.setText("<br>".join(lines))
 
+    # ------------------------------------------------------------------ IMU 자세 탭
+    def _build_imu_tab(self):
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setSpacing(6)
+        g = QGridLayout()
+        g.setHorizontalSpacing(8)
+        g.setVerticalSpacing(4)
+        sensor = _label("BMI088 (Grove 6-Axis) · I2C, 헤더 핀 1·3·5·6 · Radxa가 자세 계산 (Mahony)", None,
+                        "가속도·자이로만 내는 센서라 Radxa가 학습 레포의 bmi088.py(Mahony 필터)로 자세를 계산합니다.\n"
+                        "Radxa 경유로 연결하면 자동으로 시작합니다.")
+        self.imu_bus = QSpinBox()
+        self.imu_bus.setRange(0, 9)
+        self.imu_bus.setPrefix("/dev/i2c-")
+        self.imu_bus.setToolTip("BMI088이 꽂힌 I2C 버스 (2026-11-23 확인: /dev/i2c-3, 가속도 0x19, 자이로 0x69)")
+        self.imu_axes = []
+        for _ in range(3):
+            c = QComboBox()
+            for a in AXIS_CHOICES:
+                c.addItem(a, a)
+            self.imu_axes.append(c)
+        self.imu_axes_ok = _label("", "muted")
+        g.addWidget(_label("센서", "muted"), 0, 0)
+        g.addWidget(sensor, 0, 1, 1, 4)
+        g.addWidget(_label("I2C 버스", "muted"), 1, 0)
+        g.addWidget(self.imu_bus, 1, 1)
+        g.addWidget(_label("축", "muted", "몸통 x(앞), y(왼쪽), z(위) 방향에 놓인 IMU 축 (보드에 찍힌 X, Y, Z).\n"
+                           "2026-11-23 실물 확인: +y, −x, +z (보드가 몸통 대비 z축으로 90° 돌아가 있음)"), 2, 0)
+        axes_row = QHBoxLayout()
+        axes_row.setSpacing(4)
+        for c, nm in zip(self.imu_axes, ("몸통 앞(x) =", "왼쪽(y) =", "위(z) =")):
+            c.setFixedWidth(64)
+            axes_row.addWidget(_label(nm, "muted"))
+            axes_row.addWidget(c)
+            axes_row.addSpacing(6)
+        axes_row.addWidget(self.imu_axes_ok)
+        axes_row.addStretch(1)
+        g.addLayout(axes_row, 2, 1, 1, 4)
+        v.addLayout(g)
+
+        row = QHBoxLayout()
+        self.imu_apply_btn = QPushButton("적용 · 다시 시작")
+        self.imu_apply_btn.setObjectName("primary")
+        self.imu_apply_btn.setToolTip("이 설정으로 Radxa의 IMU 프로그램을 다시 시작합니다. BMI088은 처음 2 s 동안 로봇을 "
+                                      "똑바로·가만히 두세요 (자이로 바이어스·수평).\n설정 파일에는 '설정 저장'(Ctrl+S) 때 들어갑니다.")
+        self.imu_stop_btn = QPushButton("끄기")
+        row.addWidget(self.imu_apply_btn)
+        row.addWidget(self.imu_stop_btn)
+        row.addStretch(1)
+        v.addLayout(row)
+        self.imu_status = _label("", None)
+        self.imu_status.setWordWrap(True)
+        self.imu_status.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        v.addWidget(self.imu_status)
+
+        gv = QGridLayout()
+        gv.setHorizontalSpacing(10)
+        gv.setVerticalSpacing(2)
+        self.imu_val = {}
+        for i, (key, title, tip) in enumerate((
+                ("rp", "roll · pitch", "roll +: 오른쪽이 내려감, pitch +: 앞으로 숙임 (Z-Y-X 오일러각)"),
+                ("g", "중력 (몸통)", "정책 관측 6–8과 같은 값. 똑바로 서면 (0, 0, −1)"),
+                ("w", "자이로 °/s", "몸통 좌표 각속도 (BMI088은 시작 때 잰 바이어스를 뺀 값)"),
+                ("a", "|가속도|", "가만히 있으면 1.000 g (BMI088 환산 확인용). IM10A는 출력 설정에 따라 없음"),
+                ("yaw", "yaw (참고)", "지자기 없이는 시간이 지나며 틀어집니다. 그림에는 반영하지 않습니다"))):
+            gv.addWidget(_label(title, "muted", tip), i, 0)
+            lb = _label("—", "value", tip)
+            lb.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            gv.addWidget(lb, i, 1)
+            self.imu_val[key] = lb
+        gv.setColumnStretch(1, 1)
+        v.addLayout(gv)
+
+        self.imu_plot = pg.PlotWidget()
+        self.imu_plot.setMinimumHeight(130)
+        self.imu_plot.setMaximumHeight(170)
+        p = self.imu_plot.getPlotItem()
+        p.showGrid(x=True, y=True, alpha=0.12)
+        p.setMouseEnabled(x=False, y=False)
+        p.setMenuEnabled(False)
+        p.hideButtons()
+        p.setXRange(-20, 0, padding=0)
+        p.setLabel("left", "°", color=C["ink2"])
+        p.setLabel("bottom", "시간 [s]  (0 = 지금)", color=C["ink2"])
+        for ax in ("left", "bottom"):
+            p.getAxis(ax).setPen(pg.mkPen(C["axis"]))
+            p.getAxis(ax).setTextPen(pg.mkPen(C["muted"]))
+        p.addLegend(offset=(6, 4))
+        self.imu_curves = (p.plot(pen=pg.mkPen(C["real"], width=2), name="roll"),
+                           p.plot(pen=pg.mkPen(C["target"], width=2), name="pitch"))
+        v.addWidget(self.imu_plot)
+
+        guide = _label("<b>축 점검</b> (로봇을 똑바로 세운 채 적용, BMI088은 2 s 가만히):<br>"
+                       "1. 똑바로: 중력 ≈ (0, 0, −1), roll·pitch ≈ 0°<br>"
+                       "2. 앞으로 숙임: pitch +, 중력 x > 0, 숙이는 동안 자이로 y > 0<br>"
+                       "3. 오른쪽으로 기울임: roll +, 중력 y < 0, 기울이는 동안 자이로 x > 0<br>"
+                       "4. 왼쪽으로 돎: 자이로 z > 0<br>"
+                       "틀리면 축을 바꾸고 적용합니다. 3D 위 <b>자세 반영 (IMU)</b>을 켜면 왼쪽 그림이 실물과 같은 쪽으로 "
+                       "기울어야 합니다.", "muted")
+        guide.setWordWrap(True)
+        v.addWidget(guide)
+        v.addStretch(1)
+
+        self._imu_load_widgets()
+        for c in self.imu_axes:
+            c.currentIndexChanged.connect(lambda _: self._imu_axes_check())
+        self.imu_apply_btn.clicked.connect(self._imu_apply)
+        self.imu_stop_btn.clicked.connect(self._imu_stop)
+        return w
+
+    def _imu_load_widgets(self):
+        cfg = self.app.cfg
+        self.imu_bus.setValue(cfg.imu_i2c_bus)
+        for c, a in zip(self.imu_axes, cfg.imu_axes):
+            c.setCurrentIndex(max(0, c.findData(a)))
+        self._imu_axes_check()
+
+    def _imu_axes_check(self):
+        axes = [c.currentData() for c in self.imu_axes]
+        ok = axes_valid(axes)
+        self.imu_axes_ok.setText("" if ok else "오른손 좌표가 아님")
+        self.imu_axes_ok.setStyleSheet("" if ok else f"color: {C['critical']};")
+        return ok
+
+    def _imu_apply(self):
+        app = self.app
+        cfg = app.cfg
+        if not self._imu_axes_check():
+            self._show("IMU 축 설정이 오른손 좌표가 아닙니다 (한 축이 겹치거나 부호 하나를 바꿔야 함)", True)
+            return
+        cfg.imu_sensor = "bmi088"
+        cfg.imu_i2c_bus = int(self.imu_bus.value())
+        cfg.imu_axes = [c.currentData() for c in self.imu_axes]
+        err = app.imu_apply()
+        if err:
+            if app.link.connected:
+                self._show(err, True)
+            else:
+                self._show("IMU 설정을 바꿨습니다. Radxa 경유로 연결하면 이 설정으로 시작합니다", False)
+        else:
+            self._show("IMU 다시 시작: 2 s 동안 로봇을 가만히", False)
+
+    def _imu_stop(self):
+        self.app.link.imu_stop()
+        self._show("IMU 끔", False)
+
+    def _refresh_imu(self):
+        app = self.app
+        s = app.link.imu.snapshot()
+        st = s["state"]
+        col = {"ok": C["good"], "calibrating": C["warning"], "starting": C["warning"], "stale": C["serious"],
+               "error": C["critical"]}.get(st, C["muted"])
+        ko = {"off": "꺼짐", "starting": "시작 중", "calibrating": "보정 중 — 로봇을 똑바로·가만히",
+              "ok": "받는 중", "stale": "값이 끊김", "error": "오류"}.get(st, st)
+        name = SENSOR_SHORT.get(s["sensor"], s["sensor"])
+        head = f"<span style='color:{col}'>●</span> <b>{ko}</b>" + (f" · {name}" if name else "")
+        if st in ("ok", "stale") and s["age"] is not None:
+            head += f" · {s['hz']:.0f} Hz · {1000 * s['age']:.0f} ms 전"
+        lines = [head]
+        if s["detail"]:
+            lines.append(f"<span style='color:{C['muted']}'>{s['detail']}</span>")
+        if s["text"]:
+            lines.append(f"<span style='color:{col}'>{s['text']}</span>")
+        link = app.link
+        if st == "off" and not link.connected:
+            lines.append(f"<span style='color:{C['muted']}'>Radxa 경유로 연결하면 자동으로 시작하고 3D '자세 반영'도 "
+                         "켜집니다 (가상 로봇은 가짜 IMU). CANable이 없어도 연결됩니다.</span>")
+        elif link.connected and link.radxa is None and link.virtual is None:
+            lines.append(f"<span style='color:{C['muted']}'>지금은 노트북에 CANable을 바로 꽂은 연결이라 IMU를 읽지 "
+                         "않습니다. IMU는 Radxa에 꽂고 'Radxa 경유'로 연결하세요.</span>")
+        self.imu_status.setText("<br>".join(lines))
+        self.imu_stop_btn.setEnabled(st not in ("off",))
+        q = s["q"]
+        if q is None:
+            for lb in self.imu_val.values():
+                lb.setText("—")
+            return
+        r, p, y = (math.degrees(x) for x in roll_pitch_yaw(q))
+        gb = gravity_body(q)
+        self.imu_val["rp"].setText(f"{r:+.2f}° · {p:+.2f}°")
+        self.imu_val["g"].setText(f"{gb[0]:+.3f}  {gb[1]:+.3f}  {gb[2]:+.3f}")
+        wv = s["w"]
+        self.imu_val["w"].setText("—" if wv is None else "  ".join(f"{math.degrees(c):+7.2f}" for c in wv))
+        av = s["a"]
+        self.imu_val["a"].setText("—" if av is None else f"{float(np.linalg.norm(av)) / 9.80665:.3f} g")
+        self.imu_val["yaw"].setText(f"{y:+.1f}°")
+
+    def refresh_imu_plot(self):
+        if self.tabs.currentIndex() != self._imu_tab:
+            return
+        t, r, p = self.app.link.imu.series(20.0)
+        self.imu_curves[0].setData(t, r)
+        self.imu_curves[1].setData(t, p)
+
     # ------------------------------------------------------------------ 공통
     def _do(self, fn, *args):
         err = fn(*args)
@@ -1476,6 +1674,7 @@ class JointPanel(QWidget):
             self.send_real.setChecked(app.send_real)
         self._refresh_sweep(connected, use_real)
         self._refresh_walk(connected)
+        self._refresh_imu()
         if app.walk.active:     # 보행 중에는 관절별 명령·영점 변경을 막음 ('힘 풀기'는 그대로 → 보행 중단)
             for b in [self.btn_on, self.btn_clear, self.rel_go, self.abs_go, self.abs_zero, self.zero_btn,
                       self.clear_zero_btn, self.dir_p, self.dir_m, self.dir_chk, self.dir_all_btn,
@@ -1488,3 +1687,4 @@ class JointPanel(QWidget):
 
     def refresh_plots(self):
         self.plots.update_data(self.app.series(self.name, self.plots.window))
+        self.refresh_imu_plot()

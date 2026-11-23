@@ -515,6 +515,98 @@ cd "$env:USERPROFILE\Desktop\ASMR_ActuatorTest\MotorTestGUI"
 
 ---
 
+## 11. IMU 자세 (Radxa에서 구하고 GUI에 표시)
+
+보행 정책은 관측으로 몸통 각속도(3개)와 중력 방향(3개, 몸통 좌표)을 씁니다. IMU를 Radxa에 꽂으면 Radxa가 몸통 자세를 구해 GUI로 보냅니다. GUI의 **자세 반영 (IMU)** 을 켜면 왼쪽 실물 그림이 그 기울기만큼 기울어집니다.
+
+2026-11-23 상태:
+- 로봇에는 **BMI088**이 핀 1 (3.3 V), 3 (SDA), 5 (SCL), 6 (GND)에 달려 있습니다. `/dev/i2c-3`에서 가속도 0x19, 자이로 0x69로 보입니다 (칩 ID 0x1E, 0x0F 확인).
+- Radxa에서 I2C3를 켰고 smbus2를 설치했습니다 (아래 'Radxa 준비'). numpy는 원래 있었고, radxa 계정은 원래 i2c 그룹에 있었습니다.
+- 가만히 둔 12초 측정 (`imu_reader.py`): |가속도| 0.9996 g, 자세 흔들림 0.06° 이하, 10초 동안 틀어짐 0.03° 이하, 자이로 잡음 0.18~0.27 °/s. 필터 갱신은 약 300 Hz입니다 (I2C3가 기본 100 kHz라 한 번 읽기에 1~1.7 ms).
+- 축은 실물로 앞뒤·좌우 기울기를 보며 `+y -x +z`로 맞췄습니다 (보드가 몸통 대비 z축으로 90° 돌아가 있음). GUI는 이 BMI088 설정을 기본으로 쓰고, Radxa 경유로 연결하면 IMU와 '자세 반영'이 자동으로 켜집니다.
+
+### 센서 두 가지
+
+| | BMI088 (Seeed Grove 6-Axis, 수업 BOM) | Hiwonder IM10A (팀 전장 설계) |
+|---|---|---|
+| 센서가 내는 값 | 가속도·자이로만 | 센서 안에서 계산한 자세(쿼터니언) + 자이로 |
+| 자세 계산 | **Radxa가 계산**. 학습 레포(SOBANG_Locomotion)의 `bmi088.py`를 씁니다 (소프트 리셋 오류 처리만 고침): Mahony 필터, 400 Hz 목표, 시작 후 2초 동안 자이로 바이어스·수평을 잡음 | **센서가 계산**. Radxa는 몸통 좌표로 돌리기만 합니다 |
+| 연결 | I2C3: 핀 3 (SDA), 5 (SCL) | UART4: 핀 16 (Radxa RX), 18 (Radxa TX) |
+| Radxa에 필요한 것 | I2C3 오버레이, `python3-numpy`, `python3-smbus2`, i2c 그룹 | UART4 오버레이 (`rk3568-uart4-m1`), dialout 그룹(이미 들어 있음) |
+
+### 배선 (Radxa 전원을 끄고)
+
+ROCK 3C 헤더는 3.3 V 신호입니다. IMU 전원도 **3.3 V** 로 줍니다 (5 V로 주면 센서 보드의 풀업이 5 V가 되어 RK3566 핀이 상할 수 있음).
+
+BMI088 (Grove 선 색: 노랑 SCL, 흰색 SDA, 빨강 VCC, 검정 GND):
+
+| Grove | ROCK 3C 핀 |
+|---|---|
+| 빨강 VCC | 17 (3.3 V). 1번도 3.3 V지만 팀 설계에서 비상정지 감지선 풀업에 씀 |
+| 검정 GND | 20 (GND) |
+| 흰색 SDA | 3 (I2C3_SDA_M0) |
+| 노랑 SCL | 5 (I2C3_SCL_M0) |
+
+IM10A (팀 레포 `robot/README.md`의 "Header pins"와 같음): VCC → 17 (3.3 V), GND → 20, IMU TX → 16 (UART4_RX_M1), IMU RX → 18 (UART4_TX_M1). 꽂기 전에 IMU TX 전압이 3.4 V 아래인지 멀티미터로 잽니다.
+
+### Radxa 준비 (처음 한 번)
+
+PowerShell에서 `ssh radxa`로 들어가 실행합니다.
+
+BMI088 (2026-11-23에 이 로봇의 Radxa는 1~3을 마침):
+1. I2C3 켜기: `sudo rsetup enable_overlays rk3568-i2c3-m0.dtbo` 다음 `sudo reboot`. (메뉴로 하려면 `sudo rsetup` → Overlays → Manage overlays → I2C3 M0.)
+2. 다시 `ssh radxa`로 들어가 `ls /dev/i2c-*`를 실행합니다. `/dev/i2c-3`이 있어야 합니다 (번호가 다르면 GUI의 'BMI088 버스'를 그 번호로).
+3. 패키지와 권한: `sudo apt install -y python3-numpy python3-smbus2 i2c-tools` 다음 `sudo usermod -aG i2c radxa`. 그다음 `exit`로 나갔다가 다시 `ssh radxa`로 들어갑니다.
+   - Radxa에 인터넷이 없으면 노트북(PowerShell, odrv051 켠 상태)에서 `pip download smbus2 --no-deps --only-binary=:all: -d .` 로 받은 `smbus2-*.whl`을 `scp smbus2-0.6.1-py2.py3-none-any.whl radxa:/tmp/`로 보내고, Radxa에서 `python3 -m pip install --user --break-system-packages --no-index /tmp/smbus2-0.6.1-py2.py3-none-any.whl`. (2026-11-23에 이렇게 설치함)
+4. 센서 확인: `i2cdetect -y -r 3`. 0x18 또는 0x19(가속도)와 0x68 또는 0x69(자이로)가 보여야 합니다.
+
+IM10A:
+1. UART4 켜기: `sudo rsetup` → Overlays → Manage overlays → `rk3568-uart4-m1`을 켜고 저장 → `sudo reboot`.
+2. 다시 `ssh radxa`로 들어가 `ls -l /dev/ttyS4`를 실행합니다. 장치가 있어야 합니다.
+3. 새 IM10A는 9600 baud, 10 Hz로 나옵니다. 한 번 설정합니다 (GUI에서 Radxa 경유로 한 번 연결한 뒤라야 `~/motor_bridge/`에 파일이 있음):
+   `python3 ~/motor_bridge/imu_reader.py --sensor im10a --port /dev/ttyS4 --setup`
+   팀 레포 `legs/imu.py --setup`과 같은 설정(자이로 + 쿼터니언, 200 Hz, 230400 baud)을 센서에 저장합니다.
+
+GUI 없이 터미널에서 값만 보려면 (PowerShell에서):
+
+```powershell
+ssh -t radxa "python3 ~/motor_bridge/imu_reader.py --sensor bmi088 --bus 3 --axes +x +y +z --duration 30"
+ssh -t radxa "python3 ~/motor_bridge/imu_reader.py --sensor im10a --port /dev/ttyS4 --duration 30"
+```
+
+### GUI에서
+
+GUI는 로봇에 달린 BMI088만 씁니다 (센서 선택 없음). 기본값: `/dev/i2c-3`, 축 `+y -x +z` (2026-11-23 실물로 확인).
+
+1. 위쪽 **Radxa 경유** 를 켜고 **연결** 합니다. CANable이 없어도 연결됩니다 (IMU만 볼 때).
+   - IMU가 자동으로 시작합니다. 시작 후 2초 동안 로봇을 **가만히** 둡니다 (자이로 바이어스). 기울어져 있어도 됩니다. 상태가 '보정 중'에서 '받는 중'으로 바뀝니다.
+   - 3D 위쪽 **자세 반영 (IMU)** 도 자동으로 켜집니다. 왼쪽 실물 그림이 roll·pitch만큼 기울고, 그림 아래에 roll·pitch 값이 나옵니다. 끄려면 체크를 풉니다.
+2. 자이로 영점을 다시 잡거나 버스·축을 바꿨을 때는 **IMU 자세** 탭의 **적용 · 다시 시작** 을 누릅니다.
+3. IMU를 다시 달았다면 축을 점검합니다. 로봇을 똑바로 세운 채 적용한 뒤:
+
+| 동작 | 맞으면 |
+|---|---|
+| 똑바로 | 중력 ≈ (0, 0, −1), roll·pitch ≈ 0° |
+| 앞으로 숙임 | pitch +, 중력 x > 0, 숙이는 동안 자이로 y > 0, 그림도 앞으로 숙음 |
+| 오른쪽으로 기울임 | roll +, 중력 y < 0, 기울이는 동안 자이로 x > 0, 그림도 오른쪽으로 기욺 |
+| 왼쪽으로 돎 | 자이로 z > 0 |
+
+   틀리면 '축'(몸통 앞 x, 왼쪽 y, 위 z 방향에 놓인 IMU 축, 보드에 찍힌 X·Y·Z)을 바꾸고 다시 적용합니다. 지금 로봇은 보드가 z축으로 90° 돌아가 있어 `+y -x +z`입니다 (축 `+x +y +z`로 두면 앞으로 숙일 때 그림은 왼쪽으로, 왼쪽으로 기울일 때 그림은 뒤로 기울었음).
+4. 바꿨으면 **설정 저장** (Ctrl+S). `config/robot_config.json`의 `imu`에 들어갑니다. 같은 축 값을 보행 정책 배포 코드에도 씁니다 (`Bmi088Imu(axes=("+y", "-x", "+z"))`).
+
+### 알아 둘 점
+
+- 값의 경로: 센서 → `radxa/imu_reader.py` (Radxa, 별도 프로세스) → `radxa/can_bridge.py` → SSH 터널 → GUI. GUI로는 50 Hz로 보냅니다 (센서 읽기는 BMI088 400 Hz, IM10A 200 Hz). IMU 프로그램이 멈추거나 오류가 나도 CAN 중계와 0.5초 감시(IDLE)에는 영향이 없습니다. GUI 연결이 끊기면 IMU 프로그램도 끕니다.
+- 그림에는 **roll·pitch만** 반영합니다. yaw는 지자기 없이 시간이 지나며 틀어집니다. 보행 정책도 중력 방향(roll·pitch)과 각속도만 씁니다. 시뮬(오른쪽 그림)은 몸통 고정 그대로입니다.
+- `radxa/bmi088.py`는 학습 레포 `source/berkeley_humanoid_lite_lowlevel/berkeley_humanoid_lite_lowlevel/robot/bmi088.py`(커밋 db6d83a)의 사본입니다. 학습 레포에서 필터를 바꾸면 이 파일도 같이 바꿉니다.
+  - **한 곳을 고쳤습니다 (2026-11-23, 실물에서 발견):** 소프트 리셋(레지스터 0x7E, 0x14에 0xB6)을 쓰는 순간 칩이 리셋되며 그 쓰기에 ACK를 주지 않아, Linux가 `[Errno 6] No such device or address`를 냅니다. 가속도·자이로 모두 그렇고, 1 ms 뒤부터는 정상입니다. 원본 그대로면 시작하자마자 이 오류로 멈추므로 이 오류만 무시하게 했습니다 (`_soft_reset`). 학습 레포 원본에도 같은 수정이 필요합니다.
+- I2C3를 400 kHz로 올리면 필터 갱신이 400 Hz를 넘을 수 있습니다 (사용자 오버레이 필요). 정책은 50 Hz라 지금 300 Hz로도 충분합니다.
+- 이 경로(GUI 표시)는 확인용입니다. 보행 정책을 Radxa에서 돌릴 때는 정책 프로그램이 IMU를 직접 읽는 것이 지연이 가장 작습니다. IMU 지연은 학습 레포 결과에서 가장 민감한 항목이었습니다 (학습 조건: IMU 지연 0~6 ms).
+- IM10A는 제조사 필터가 자세를 계산합니다. 발이 땅에 닿을 때 기울기가 튀는지, 지연이 학습 조건 안인지는 실물에서 한 번 확인해야 합니다.
+- 가상 로봇(`--virtual`)에서는 가짜 IMU 값(roll ±6°, pitch ±4°)이 나옵니다. Radxa에서 배선 없이 경로만 시험하려면 명령줄로 `python3 ~/motor_bridge/imu_reader.py --sensor fake`를 씁니다. IM10A도 명령줄로는 읽을 수 있습니다 (`--sensor im10a`, 위 '센서 두 가지'). GUI에서 고르는 칸은 없앴습니다.
+
+---
+
 ## 파일
 
 | 파일 | 내용 |
@@ -522,8 +614,10 @@ cd "$env:USERPROFILE\Desktop\ASMR_ActuatorTest\MotorTestGUI"
 | `motor_test_gui.py` | 실행 파일 |
 | `fetch_model.py` | 수업 로봇 모델 내려받기 |
 | `config/robot_config.json` | CAN 포트 1·2와 속도, 관절 설정(node, 방향, 영점, 토크 부호, 기구 끝, 이동 제한). 처음 저장할 때 생김 |
-| `motorgui/` | 프로그램 코드 (CAN 통신, 시뮬, 화면, 보행 테스트 `walk.py`, Radxa 경유 `radxa_link.py`) |
-| `radxa/can_bridge.py` | Radxa에서 도는 CAN 중계 프로그램 (표준 라이브러리만). 연결할 때 GUI가 Radxa `~/motor_bridge/`에 복사함 |
+| `motorgui/` | 프로그램 코드 (CAN 통신, 시뮬, 화면, 보행 테스트 `walk.py`, Radxa 경유 `radxa_link.py`, IMU 자세 `imu.py`) |
+| `radxa/can_bridge.py` | Radxa에서 도는 CAN 중계 프로그램 (표준 라이브러리만). IMU 프로그램도 띄움. 연결할 때 GUI가 Radxa `~/motor_bridge/`에 복사함 |
+| `radxa/imu_reader.py` | Radxa에서 IMU(BMI088 / IM10A / 가짜)를 읽어 몸통 자세·각속도를 냄 (11절). 혼자 실행해도 됨 |
+| `radxa/bmi088.py` | BMI088 드라이버 + Mahony 자세 필터. 학습 레포 사본 (커밋 db6d83a + 소프트 리셋 NACK 무시 한 곳) |
 | `radxa/latency_test.py` | Radxa에서 도는 지연 측정 도구 (10절). `latency/latency.py`가 Radxa `~/motor_latency/`에 복사함 |
 | `latency/latency.py` | 지연 실험 실행·분석 (PC) |
 | `latency/fit_inertia.py` | 계단 기록으로 관절 관성·armature 맞춤 (오프라인) |

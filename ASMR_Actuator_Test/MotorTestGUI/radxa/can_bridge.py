@@ -19,32 +19,42 @@ CAN 장치:
   - CAN 장치는 TIOCEXCL로 독점해서 다른 프로그램과 동시에 열리지 않는다.
 
 통신 (작은 끝, 메시지 = 머리 <BH>(종류, 길이) + 내용):
-  1 FRAME  양방향  <BBBxI8s> 버스 번호, 플래그(1 확장 ID, 2 RTR), DLC, ID, 데이터 8바이트
-  2 PING   GUI→    <dI> 보낸 시각, 번호   →  3 PONG 같은 내용
-  4 INFO   →GUI    JSON (연결 직후: 버스 목록, 비트레이트, 버전)
-  5 LOG    →GUI    UTF-8 글
+  1 FRAME    양방향  <BBBxI8s> 버스 번호, 플래그(1 확장 ID, 2 RTR), DLC, ID, 데이터 8바이트
+  2 PING     GUI→    <dI> 보낸 시각, 번호   →  3 PONG 같은 내용
+  4 INFO     →GUI    JSON (연결 직후: 버스 목록, 비트레이트, 버전, IMU 지원 여부)
+  5 LOG      →GUI    UTF-8 글
+  6 IMU      →GUI    JSON 한 줄 (imu_reader.py 출력 그대로, 끝나면 {"type": "exit", ...})
+  7 IMU_CMD  GUI→    JSON {"cmd": "start", "opts": {sensor, bus, port, baud, axes, out_hz}} 또는 {"cmd": "stop"}
+
+IMU: GUI가 IMU_CMD start를 보내면 같은 폴더의 imu_reader.py를 별도 프로세스로 띄운다 (BMI088이면 numpy·smbus2가
+그 프로세스에만 필요). IMU가 멈추거나 오류가 나도 CAN 중계와 감시(IDLE)에는 영향이 없다. GUI 연결이 끊기면 IMU도 끈다.
 """
 import argparse
 import glob
 import json
 import os
+import re
 import select
 import socket
 import struct
+import subprocess
 import sys
 import threading
 import time
+from collections import deque
 
-VERSION = "2026-11-20"
+VERSION = "2026-11-23"
 CANABLE_IDS = {("16d0", "117e")}
 SLCAN_BITRATE = {10000: b"0", 20000: b"1", 50000: b"2", 100000: b"3", 125000: b"4", 250000: b"5",
                  500000: b"6", 750000: b"7", 1000000: b"8"}
 HDR = struct.Struct("<BH")
 FRAME = struct.Struct("<BBBxI8s")
 PING = struct.Struct("<dI")
-T_FRAME, T_PING, T_PONG, T_INFO, T_LOG = 1, 2, 3, 4, 5
+T_FRAME, T_PING, T_PONG, T_INFO, T_LOG, T_IMU, T_IMU_CMD = 1, 2, 3, 4, 5, 6, 7
 F_EXT, F_RTR = 1, 2
 SET_AXIS_STATE, STATE_IDLE = 0x007, 1
+IMU_READER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "imu_reader.py")
+AXIS_RE = re.compile(r"^[+-]?[xyz]$")
 
 
 def log(text):
@@ -239,6 +249,85 @@ def find_canables():
     return out
 
 
+# ---------------------------------------------------------------------- IMU (별도 프로세스)
+def imu_args(opts):
+    """GUI 설정 → imu_reader.py 인자. 알려진 값만 받는다."""
+    sensor = opts.get("sensor")
+    if sensor not in ("bmi088", "im10a", "fake"):
+        raise ValueError(f"모르는 IMU 종류: {sensor!r}")
+    axes = [str(s).strip() for s in opts.get("axes", ["+x", "+y", "+z"])]
+    if len(axes) != 3 or not all(AXIS_RE.match(s) for s in axes):
+        raise ValueError(f"IMU 축 설정이 이상합니다: {axes}")
+    out_hz = min(200.0, max(1.0, float(opts.get("out_hz", 50.0))))
+    # '-x'처럼 마이너스로 시작하는 값을 argparse가 옵션으로 읽지 않게 한 덩어리로 넘긴다
+    args = ["--sensor", sensor, "--json", "--out-hz", f"{out_hz:g}", "--axes=" + ",".join(axes)]
+    if sensor == "bmi088":
+        args += ["--bus", str(int(opts.get("bus", 3)))]
+    elif sensor == "im10a":
+        port = str(opts.get("port", "/dev/ttyS4")).strip()
+        if not re.match(r"^/dev/[A-Za-z0-9_./-]+$", port):
+            raise ValueError(f"IMU 포트 이름이 이상합니다: {port!r}")
+        args += ["--port", port, "--baud", str(int(opts.get("baud", 230400)))]
+    return args
+
+
+class ImuProc:
+    def __init__(self, send):
+        self.send = send                  # send(종류, 내용): 지금 연결된 GUI로
+        self.proc = None
+        self.lock = threading.Lock()
+
+    def start(self, opts):
+        args = imu_args(opts)
+        self.stop()
+        if not os.path.exists(IMU_READER):
+            raise RuntimeError(f"{IMU_READER}가 없습니다 (GUI가 복사하지 못함)")
+        p = subprocess.Popen([sys.executable, "-u", IMU_READER, *args], stdin=subprocess.DEVNULL,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        with self.lock:
+            self.proc = p
+        tail = deque(maxlen=6)
+        threading.Thread(target=self._err, args=(p, tail), daemon=True, name="imu-err").start()
+        threading.Thread(target=self._out, args=(p, tail), daemon=True, name="imu-out").start()
+        log(f"IMU 시작: {' '.join(args)} (pid {p.pid})")
+
+    def _out(self, p, tail):
+        for raw in iter(p.stdout.readline, b""):
+            line = raw.strip()
+            if line:
+                self.send(T_IMU, line)
+        rc = p.wait()
+        with self.lock:
+            current = self.proc is p
+            if current:
+                self.proc = None
+        if current:                        # 일부러 끈 것이 아니면 GUI에 알림
+            time.sleep(0.05)               # stderr 마지막 줄을 tail에 받을 시간
+            self.send(T_IMU, json.dumps({"type": "exit", "code": rc, "msg": " / ".join(tail)}).encode())
+            log(f"IMU 프로그램 끝남 (코드 {rc}) {' / '.join(tail)}")
+
+    def _err(self, p, tail):
+        for raw in iter(p.stderr.readline, b""):
+            line = raw.decode(errors="replace").strip()
+            if line:
+                tail.append(line)
+                self.send(T_LOG, f"[IMU] {line}".encode())
+
+    def stop(self):
+        with self.lock:
+            p, self.proc = self.proc, None
+        if p is not None and p.poll() is None:
+            if os.name == "nt":       # PC 시험용: 가상환경 python.exe는 진짜 python을 자식으로 띄우므로 같이 끔
+                subprocess.run(["taskkill", "/T", "/F", "/PID", str(p.pid)], capture_output=True)
+            else:
+                p.terminate()
+            try:
+                p.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                p.kill()
+            log("IMU 끔")
+
+
 # ---------------------------------------------------------------------- 중계
 class Bridge:
     def __init__(self, devices, bitrate, watchdog_s):
@@ -253,6 +342,28 @@ class Bridge:
         self.seen = [set() for _ in devices]        # 버스별로 본 node
         self.dev_err = [None] * len(devices)
         self.counts = {"rx_can": 0, "tx_can": 0, "tx_err": 0}
+        self.imu = ImuProc(self.send_client)
+
+    def send_client(self, typ, payload):
+        c = self.client
+        if c is not None:
+            try:
+                c.send_msg(typ, payload)
+            except OSError:
+                pass
+
+    def imu_command(self, payload):
+        try:
+            d = json.loads(payload.decode())
+            if d.get("cmd") == "start":
+                self.imu.start(d.get("opts") or {})
+            elif d.get("cmd") == "stop":
+                self.imu.stop()
+                self.send_client(T_IMU, json.dumps({"type": "stopped"}).encode())
+            else:
+                raise ValueError(f"모르는 IMU 명령: {d.get('cmd')!r}")
+        except Exception as e:  # noqa: BLE001 - 설정 오류를 GUI에 보여 줌
+            self.send_client(T_IMU, json.dumps({"type": "error", "msg": f"IMU 시작 실패: {e}"}).encode())
 
     # -- CAN에서 받음
     def on_frame(self, bus, can_id, flags, dlc, data):
@@ -319,7 +430,8 @@ class Bridge:
         self.last_rx = time.monotonic()
         self.tripped = False
         info = {"version": VERSION, "bitrate": self.bitrate, "watchdog_s": self.watchdog_s, "host": socket.gethostname(),
-                "buses": [{"name": d.name, "kind": d.kind, "serial": d.serial} for d in self.devices]}
+                "buses": [{"name": d.name, "kind": d.kind, "serial": d.serial} for d in self.devices],
+                "imu": os.path.exists(IMU_READER)}
         cl.send_msg(T_INFO, json.dumps(info).encode())
         log(f"GUI 연결됨 (버스 {len(self.devices)}개)")
         try:
@@ -341,6 +453,8 @@ class Bridge:
                                 cl.send_msg(T_LOG, f"⚠ Radxa: 버스 {bus + 1} 송신 실패: {e}".encode())
                 elif typ == T_PING:
                     cl.send_msg(T_PONG, payload)
+                elif typ == T_IMU_CMD:
+                    threading.Thread(target=self.imu_command, args=(payload,), daemon=True, name="imu-cmd").start()
         except OSError:
             pass
         finally:
@@ -352,6 +466,7 @@ class Bridge:
                 pass
             log("GUI 연결 끊김")
             self.idle_all("GUI 연결 끊김")
+            self.imu.stop()
 
     def close(self):
         self.stop.set()
@@ -480,6 +595,7 @@ def main():
         pass
     finally:
         br.idle_all("중계 끝남")
+        br.imu.stop()
         br.close()
         srv.close()
         if a.unix:

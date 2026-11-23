@@ -162,7 +162,20 @@ class RobotConfig:
     guard_err_s: float = 0.5          #   이 시간 이어지면 그 관절 IDLE
     guard_current_a: float = 8.0      # |Iq|가 이보다 크게
     guard_current_s: float = 1.0      #   이 시간 이어지면 그 관절 IDLE
+    # IMU: 로봇의 BMI088 (Grove 6-Axis, 헤더 핀 1·3·5·6 = I2C3). Radxa 경유로 연결하면 Radxa가 읽는다.
+    # 2026-11-23 실물 확인: /dev/i2c-3, 보드가 몸통 대비 z축으로 90° 돌아가 있어 축 = (+y, -x, +z).
+    # GUI에서는 센서를 고르지 않는다 (imu_reader.py는 im10a·fake도 명령줄로 지원).
+    imu_sensor: str = "bmi088"
+    imu_i2c_bus: int = 3              # /dev/i2c-N
+    imu_port: str = "/dev/ttyS4"      # (IM10A용, GUI에서는 안 씀)
+    imu_baud: int = 230400            # (IM10A용, GUI에서는 안 씀)
+    imu_axes: list = field(default_factory=lambda: ["+y", "-x", "+z"])   # 몸통 x, y, z 방향의 IMU 축
+    imu_out_hz: float = 50.0          # Radxa → GUI 전송 빈도
     path: Path = field(default=CONFIG_PATH, repr=False)
+
+    def imu_opts(self):
+        return {"sensor": self.imu_sensor, "bus": self.imu_i2c_bus, "port": self.imu_port, "baud": self.imu_baud,
+                "axes": list(self.imu_axes), "out_hz": self.imu_out_hz}
 
     # ---- 조회 ----
     def joint(self, name):
@@ -221,6 +234,14 @@ class RobotConfig:
         cfg.guard_err_s = float(gd.get("track_err_s", cfg.guard_err_s))
         cfg.guard_current_a = float(gd.get("current_a", cfg.guard_current_a))
         cfg.guard_current_s = float(gd.get("current_s", cfg.guard_current_s))
+        im = d.get("imu", {})              # 센서 종류는 읽지 않음 (항상 BMI088)
+        cfg.imu_i2c_bus = int(im.get("i2c_bus", cfg.imu_i2c_bus))
+        cfg.imu_port = str(im.get("port", cfg.imu_port)) or "/dev/ttyS4"
+        cfg.imu_baud = int(im.get("baud", cfg.imu_baud))
+        axes = im.get("axes", cfg.imu_axes)
+        if isinstance(axes, list) and len(axes) == 3:
+            cfg.imu_axes = [str(a) for a in axes]
+        cfg.imu_out_hz = float(im.get("out_hz", cfg.imu_out_hz))
         for name, jd in d.get("joints", {}).items():
             try:
                 j = cfg.joint(name)
@@ -258,6 +279,8 @@ class RobotConfig:
                      "limit_margin_deg": self.limit_margin_deg},
             "guard": {"track_err_deg": self.guard_err_deg, "track_err_s": self.guard_err_s,
                       "current_a": self.guard_current_a, "current_s": self.guard_current_s},
+            "imu": {"sensor": self.imu_sensor, "i2c_bus": self.imu_i2c_bus, "port": self.imu_port,
+                    "baud": self.imu_baud, "axes": list(self.imu_axes), "out_hz": self.imu_out_hz},
             "joints": {j.name: j.to_json() for j in self.joints},
         }
         path.write_text(json.dumps(d, indent=2, ensure_ascii=False), encoding="utf-8")
