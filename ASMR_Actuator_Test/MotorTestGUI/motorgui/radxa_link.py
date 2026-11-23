@@ -1,14 +1,17 @@
 """Radxa 경유 CAN: GUI의 CAN 프레임을 LAN(SSH 터널)으로 Radxa의 중계 프로그램(radxa/can_bridge.py)에 보낸다.
 
 연결 순서 (host가 SSH 별칭이나 주소일 때, 예: 'radxa'):
-  1. ssh로 중계 프로그램을 Radxa의 ~/motor_bridge/에 복사 (매번 덮어씀: GUI와 같은 판을 씀)
+  1. ssh로 중계 프로그램과 IMU 프로그램(can_bridge.py, imu_reader.py, bmi088.py)을 Radxa의 ~/motor_bridge/에 복사
+     (tar 한 번, 매번 덮어씀: GUI와 같은 판을 씀)
   2. ssh -L 127.0.0.1:<빈 포트>:<Radxa 유닉스 소켓> 로 중계 프로그램 실행 → 'READY' 줄을 기다림
   3. 127.0.0.1:<포트>로 TCP 접속 → INFO(버스 목록) 받음
 host가 'tcp://IP:PORT'면 이미 --listen으로 실행 중인 중계 프로그램에 바로 접속한다 (시험용).
 
 CanLink는 버스마다 RadxaBus(python-can BusABC)를 받으므로 폴링·보호 정지·보행 테스트가 그대로 동작한다.
 SSH가 끊기거나 GUI가 멈추면 Radxa 쪽 감시(0.5 s)가 모든 node를 IDLE로 둔다.
+IMU: imu_start(opts)를 부르면 중계가 imu_reader.py를 띄우고, 그 출력이 imu_feed(motorgui.imu.ImuFeed)에 들어온다.
 """
+import io
 import json
 import os
 import queue
@@ -17,6 +20,7 @@ import socket
 import struct
 import subprocess
 import sys
+import tarfile
 import threading
 import time
 from collections import deque
@@ -24,12 +28,14 @@ from pathlib import Path
 
 import can
 
-BRIDGE_SRC = Path(__file__).resolve().parents[1] / "radxa" / "can_bridge.py"
+RADXA_DIR = Path(__file__).resolve().parents[1] / "radxa"
+BRIDGE_SRC = RADXA_DIR / "can_bridge.py"
+DEPLOY_FILES = ("can_bridge.py", "imu_reader.py", "bmi088.py")
 REMOTE_DIR = "~/motor_bridge"
 HDR = struct.Struct("<BH")
 FRAME = struct.Struct("<BBBxI8s")
 PING = struct.Struct("<dI")
-T_FRAME, T_PING, T_PONG, T_INFO, T_LOG = 1, 2, 3, 4, 5
+T_FRAME, T_PING, T_PONG, T_INFO, T_LOG, T_IMU, T_IMU_CMD = 1, 2, 3, 4, 5, 6, 7
 F_EXT, F_RTR = 1, 2
 PING_S = 0.1
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "ServerAliveInterval=2",
@@ -48,13 +54,26 @@ def _free_port():
     return port
 
 
+def deploy_bundle():
+    """Radxa에 보낼 파일들을 tar 하나로."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w", format=tarfile.USTAR_FORMAT) as tf:
+        for name in DEPLOY_FILES:
+            data = (RADXA_DIR / name).read_bytes()
+            ti = tarfile.TarInfo(name)
+            ti.size, ti.mode, ti.mtime = len(data), 0o644, int(time.time())
+            tf.addfile(ti, io.BytesIO(data))
+    return buf.getvalue()
+
+
 class RadxaConnection:
-    def __init__(self, host, bitrate, log=None, timeout=15.0, extra_args=""):
+    def __init__(self, host, bitrate, log=None, timeout=15.0, extra_args="", imu_feed=None):
         self.host = (host or "radxa").strip()
         self.bitrate = int(bitrate)
         self._log = log or (lambda s: None)
         self.timeout = timeout
         self.extra_args = extra_args
+        self.imu_feed = imu_feed
         self.proc = None
         self.sock = None
         self.info = {}
@@ -93,14 +112,14 @@ class RadxaConnection:
                               creationflags=NO_WINDOW, **kw)
 
     def _deploy(self):
-        """중계 프로그램을 Radxa에 복사 (scp 대신 ssh + cat: 한 번에)."""
-        src = BRIDGE_SRC.read_bytes()
+        """중계·IMU 프로그램을 Radxa에 복사 (scp 대신 ssh + tar: 한 번에)."""
+        src = deploy_bundle()
         t0 = time.perf_counter()
-        r = self._ssh([f"mkdir -p {REMOTE_DIR} && cat > {REMOTE_DIR}/can_bridge.py && python3 --version"], input=src)
+        r = self._ssh([f"mkdir -p {REMOTE_DIR} && tar -x -m -f - -C {REMOTE_DIR} && python3 --version"], input=src)
         if r.returncode != 0:
             err = (r.stderr or b"").decode(errors="replace").strip()
             raise RuntimeError(f"Radxa({self.host})에 SSH로 접속하지 못했습니다: {err or r.returncode}\n{HINT}")
-        self._log(f"Radxa({self.host})에 중계 프로그램 복사 ({len(src)} 바이트, "
+        self._log(f"Radxa({self.host})에 중계·IMU 프로그램 복사 ({len(src)} 바이트, "
                   f"{(r.stdout or b'').decode(errors='replace').strip()}, {time.perf_counter() - t0:.1f} s)")
 
     def _start_ssh(self):
@@ -210,6 +229,19 @@ class RadxaConnection:
                         text = payload.decode(errors="replace")
                         self.logs.append(text)
                         self._log(text if text.startswith("⚠") else f"[Radxa] {text}")
+                    elif typ == T_IMU and self.imu_feed is not None:
+                        try:
+                            d = json.loads(payload.decode())
+                        except ValueError:
+                            continue
+                        if d.get("type") == "error":
+                            self._log(f"⚠ Radxa IMU: {d.get('msg')}")
+                        elif d.get("type") == "exit":
+                            self._log(f"⚠ Radxa IMU 프로그램 끝남 (코드 {d.get('code')})"
+                                      + (f": {d['msg']}" if d.get("msg") else ""))
+                        elif d.get("type") == "info":
+                            self._log(f"Radxa IMU: {d.get('sensor')} · {d.get('detail')}")
+                        self.imu_feed.on_message(d)
         except OSError as e:
             self._mark_dead(f"Radxa 연결 끊김: {e}")
             return
@@ -243,6 +275,32 @@ class RadxaConnection:
         if self.dead is None and not self._stop.is_set():
             self.dead = why
             self._log(f"⚠ {why}")
+
+    # ------------------------------------------------------------------ IMU
+    @property
+    def imu_supported(self):
+        return bool(self.info.get("imu"))
+
+    def imu_start(self, opts):
+        """opts: sensor(bmi088|im10a|fake), bus, port, baud, axes, out_hz. 실패하면 이유 문자열."""
+        if not self.imu_supported:
+            return "Radxa 중계 프로그램이 IMU를 지원하지 않습니다 (imu_reader.py 없음)"
+        if self.imu_feed is not None:
+            self.imu_feed.reset("starting", "IMU 프로그램 시작 중…")
+            self.imu_feed.set_state("starting", "IMU 프로그램 시작 중…", sensor=opts.get("sensor", ""))
+        try:
+            self._send(T_IMU_CMD, json.dumps({"cmd": "start", "opts": opts}).encode())
+        except (OSError, can.CanOperationError) as e:
+            return f"IMU 명령을 보내지 못했습니다: {e}"
+        return None
+
+    def imu_stop(self):
+        try:
+            self._send(T_IMU_CMD, json.dumps({"cmd": "stop"}).encode())
+        except (OSError, can.CanOperationError):
+            pass
+        if self.imu_feed is not None:
+            self.imu_feed.reset("off")
 
     # ------------------------------------------------------------------ 버스 / 닫기
     def buses(self):

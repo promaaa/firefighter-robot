@@ -12,6 +12,7 @@ import numpy as np
 from .can_link import CanLink
 from .commander import Commander
 from .config import TURN_TO_JOINT_DEG
+from .imu import roll_pitch_yaw, tilt_data, tilt_matrix
 from .sim import SimRobot, joint_infos, load_model
 from .walk import WalkTest
 from . import protocol as P
@@ -31,6 +32,13 @@ class App:
         self.sim = SimRobot(self.model, self.infos)
         self.real_data = mujoco.MjData(self.model)
         self.target_data = mujoco.MjData(self.model)
+        # 실물 3D 그림용: '자세 반영'이 켜져 있으면 IMU roll·pitch만큼 몸통째 기울인 사본 (계산에는 real_data를 씀)
+        self.attitude_on = False
+        self._real_tilt = mujoco.MjData(self.model)
+        self._target_tilt = mujoco.MjData(self.model)
+        self.real_view, self.target_view = self.real_data, self.target_data
+        self.view_tilt = None                  # 이번 프레임에 그림에 반영한 (roll, pitch) [rad]
+        self._base_body = next((b for b in range(1, self.model.nbody) if self.model.body_parentid[b] == 0), 0)
         self.sim_idle_mode = "follow"          # follow: 실물 따라가기 / passive: 힘 풀림(중력)
         self.send_real = True
         self.tgt_hist = {n: deque(maxlen=TARGET_HIST_LEN) for n in cfg.names}
@@ -120,7 +128,30 @@ class App:
             self.tgt_hist[name].append((t, math.nan if tg is None else tg))
         mujoco.mj_kinematics(self.model, self.real_data)
         mujoco.mj_kinematics(self.model, self.target_data)
+        self._update_view_tilt()
         self.sim.advance(t, self._sim_targets)
+
+    def _update_view_tilt(self):
+        """'자세 반영'이 켜져 있고 IMU 값이 새것이면 실물 그림(실측·목표 겹침)을 몸통 기준으로 roll·pitch만큼 돌린다."""
+        self.view_tilt = None
+        q = self.link.imu.fresh_q() if self.attitude_on else None
+        if q is None:
+            self.real_view, self.target_view = self.real_data, self.target_data
+            return
+        roll, pitch, _ = roll_pitch_yaw(q)
+        rot = tilt_matrix(roll, pitch)
+        pivot = self.real_data.xpos[self._base_body].copy()
+        for src, dst in ((self.real_data, self._real_tilt), (self.target_data, self._target_tilt)):
+            dst.qpos[:] = src.qpos
+            mujoco.mj_kinematics(self.model, dst)
+            tilt_data(self.model, dst, rot, pivot)
+        self.real_view, self.target_view = self._real_tilt, self._target_tilt
+        self.view_tilt = (roll, pitch)
+
+    def imu_apply(self):
+        """IMU 설정을 바꾼 뒤: Radxa에서 IMU를 그 설정으로 다시 시작 (센서 '없음'이면 끔). 실패하면 이유."""
+        self.dirty = True
+        return self.link.imu_apply()
 
     def _sim_targets(self, t):
         out = {}

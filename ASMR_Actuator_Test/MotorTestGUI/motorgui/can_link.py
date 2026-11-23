@@ -33,6 +33,7 @@ from bench import can_simple as cs
 
 from . import protocol as P
 from .config import RAD_PER_TURN
+from .imu import FakeImu, ImuFeed
 
 HIST_LEN = 3000            # 50 Hz로 60 s
 OFFLINE_S = 0.6            # 이 시간 동안 아무것도 안 오면 연결 끊김
@@ -102,6 +103,8 @@ class CanLink:
         self.logs = deque(maxlen=1000)    # (t, text)
         self.virtual = None
         self.radxa = None                 # Radxa 경유일 때 RadxaConnection (왕복 시간 등)
+        self.imu = ImuFeed()              # IMU 값 (Radxa의 imu_reader.py 또는 가상 IMU가 채움)
+        self._fake_imu = None
         self._q = queue.Queue()
         self._thread = None
         self._stop = threading.Event()
@@ -178,6 +181,29 @@ class CanLink:
     def stop_record(self):
         self.recording = False
 
+    def imu_apply(self):
+        """지금 설정(cfg.imu_*)으로 IMU를 다시 시작하거나 끈다 (Radxa 경유일 때). 실패하면 이유 문자열."""
+        if self.virtual is not None:
+            if self._fake_imu is None:
+                self._fake_imu = FakeImu(self.imu)
+            else:
+                self._fake_imu.stop()
+            self._fake_imu.start()
+            return None
+        conn = self.radxa
+        if conn is None or not self.connected:
+            return "IMU는 Radxa 경유로 연결했을 때 읽습니다 (IMU는 Radxa에 꽂음)"
+        if self.cfg.imu_sensor == "none":
+            conn.imu_stop()
+            return None
+        return conn.imu_start(self.cfg.imu_opts())
+
+    def imu_stop(self):
+        if self.radxa is not None:
+            self.radxa.imu_stop()
+        elif self._fake_imu is not None:
+            self._fake_imu.stop()
+
     # ------------------------------------------------------------------ 스레드
     def _reset_counters(self):
         self._rx = self._tx = self._bits = self._ticks = 0
@@ -193,6 +219,8 @@ class CanLink:
             chans = [f"{VIRTUAL_CHANNEL}_{i + 1}" for i in range(n)]
             self.virtual = VirtualRobot(chans, **vk)
             self.virtual.start()
+            self._fake_imu = FakeImu(self.imu)
+            self._fake_imu.start()
             buses = [can.Bus(interface="virtual", channel=ch, receive_own_messages=False) for ch in chans]
             names = ["가상1", "가상2"][:n]
             split = " · 버스 2개 (왼다리/오른다리)" if n == 2 else ""
@@ -219,14 +247,25 @@ class CanLink:
         """Radxa 경유: SSH로 중계 프로그램을 띄우고 Radxa의 CANable들을 버스로 받는다."""
         from .radxa_link import RadxaConnection
         self.state, self.message = "connecting", f"Radxa({host}) 접속 중… (중계 프로그램 복사·실행)"
-        conn = RadxaConnection(host, bitrate, log=self.log).start()
+        imu_on = self.cfg.imu_sensor != "none"
+        # IMU를 쓰면 CANable이 없어도 연결한다 (IMU 축 점검만 할 때). 명령할 관절이 없으니 안전에는 상관없음
+        conn = RadxaConnection(host, bitrate, log=self.log, extra_args="--allow-empty" if imu_on else "",
+                               imu_feed=self.imu).start()
         buses = conn.buses()
-        if not buses:
+        if not buses and not imu_on:
             conn.close()
             raise RuntimeError("Radxa에 CAN 장치가 없습니다 (CANable을 Radxa USB에 꽂았는지 확인)")
         self.radxa = conn
+        imu_note = ""
+        if imu_on:
+            err = conn.imu_start(self.cfg.imu_opts())
+            imu_note = f" · IMU {self.cfg.imu_sensor}" if not err else ""
+            if err:
+                self.imu.set_state("error", err)
+                self.log(f"⚠ {err}")
         names = [f"Radxa {b['name']}" for b in conn.info.get("buses", [])]
-        return buses, names, f"Radxa 경유 ({host}) · CAN {len(buses)}개 · {bitrate // 1000} kbps"
+        can_txt = f"CAN {len(buses)}개" if buses else "CAN 없음 (IMU만)"
+        return buses, names, f"Radxa 경유 ({host}) · {can_txt} · {bitrate // 1000} kbps{imu_note}"
 
     def _run(self, interface, channels, bitrate, poll_hz, virtual_kwargs):
         try:
@@ -269,12 +308,17 @@ class CanLink:
                     span = now_p - t_stat
                     loads = [b / span / rate for b in self._bits_bus]
                     self.stats = {"rx_fps": self._rx / span, "tx_fps": self._tx / span,
-                                  "load": max(loads), "loads": loads,
+                                  "load": max(loads) if loads else 0.0, "loads": loads,
                                   "tx_err": self._tx_err, "poll_hz": self._ticks / span,
                                   "rtt_ms": None if self.radxa is None else self.radxa.rtt_ms}
                     self._rx = self._tx = self._bits = self._ticks = 0
                     self._bits_bus = [0] * len(buses)
                     t_stat = now_p
+                if not buses:            # Radxa에 CANable 없이 IMU만 볼 때
+                    if self.radxa is not None and self.radxa.dead:
+                        raise RuntimeError(self.radxa.dead)
+                    self._stop.wait(max(0.0, min(next_tick - time.perf_counter(), 0.02)))
+                    continue
                 # 받기: 모든 버스에서 쌓인 프레임을 다 꺼내고, 없으면 한 버스씩 돌아가며 최대 2 ms 기다림
                 got = False
                 for i, b in enumerate(buses):
@@ -307,11 +351,15 @@ class CanLink:
                 self.radxa.close()
                 self.radxa = None
             self._stop_virtual()
+            self.imu.reset("off")
             if self.state != "error":
                 self.state, self.message = "disconnected", "연결 끊음"
                 self.log("연결 끊음")
 
     def _stop_virtual(self):
+        if self._fake_imu is not None:
+            self._fake_imu.stop()
+            self._fake_imu = None
         if self.virtual is not None:
             self.virtual.stop()
             self.virtual = None

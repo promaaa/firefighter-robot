@@ -1,6 +1,6 @@
 # ASMR Actuator Test
 
-Bench tests, drive setup records and a sim-vs-real GUI for the 12 leg actuators. The drives are MKS XDrive MINI boards running the course ODrive 0.5.1 "instant-start" firmware. Everything here runs on a Windows laptop, over USB for setup and over two CANable adapters for CAN. The latency tests and the GUI's Radxa mode also run a small program on the ROCK 3C.
+Bench tests, drive setup records and a sim-vs-real GUI for the 12 leg actuators. The drives are MKS XDrive MINI boards running the course ODrive 0.5.1 "instant-start" firmware. Everything here runs on a Windows laptop, over USB for setup and over two CANable adapters for CAN. The latency tests and the GUI's Radxa mode also run a small program on the ROCK 3C, and the Radxa mode reads the IMU there.
 
 This folder is a copy of [GeunYoung-Heo/SOBANG_MotorTest](https://github.com/GeunYoung-Heo/SOBANG_MotorTest), which keeps the full history and the raw logs left out here (see [Not in this folder](#not-in-this-folder)). The step-by-step guides are in Korean:
 
@@ -23,6 +23,7 @@ This folder is a copy of [GeunYoung-Heo/SOBANG_MotorTest](https://github.com/Geu
 | MotorTestGUI through the ROCK 3C (Radxa mode): all 12 heartbeats, polling at 50 Hz, encoder request to reply 4.7 ms | measured on board | `python motor_test_gui.py`, then check "Radxa 경유" (through Radxa) | 2026-11-20 |
 | Latency and joint response from the ROCK 3C: command to drive 0.5 ms, PD time constant = Kd/Kp, friction, armature, sine response ([results](results/real_actuator_20261120.md)) | measured on board | `python latency/latency.py run rtt\|loop\|step\|sine` | 2026-11-20 |
 | Left knee (node 7) follows commands without the CAN calibration | measured on board | `python latency/latency.py run step --joint left_knee_pitch` | 2026-11-20 |
+| IMU on the ROCK 3C: the robot's BMI088 on I2C3 (header pins 1, 3, 5, 6), attitude from the SOBANG_Locomotion Mahony filter at about 300 Hz; axes +y −x +z checked by tilting the robot; MotorTestGUI tilts the real-robot view by roll and pitch | measured on board | `python motor_test_gui.py`, then check "Radxa 경유" (through Radxa) | 2026-11-23 |
 | Sim-vs-real comparison in MotorTestGUI | planned | | |
 | BasicTest and MotorTestGUI on the ROCK 3C | planned | | |
 
@@ -34,8 +35,8 @@ This folder is a copy of [GeunYoung-Heo/SOBANG_MotorTest](https://github.com/Geu
 | `BasicTest/bench/` | Shared code: USB access with odrivetool, CAN Simple, motor parameters, joint table, simulated drive |
 | `BasicTest/data/IDxx/` | One folder per drive (`IDxx` = node xx): setup backups `xdrive_IDxx_after_setup_*.json`, measurement logs and plots |
 | `BasicTest/analysis/` | Break-in report of all 12 actuators: script, figures, tables |
-| `MotorTestGUI/` | PySide6 + MuJoCo GUI. Left: the real robot from CAN encoder readings. Center: MuJoCo with the same target trajectory. Right: joint jog with guards, plots, direction and zero setting, and a walking test (rule-based stepping gait in a harness). One or two CAN buses, on the laptop or through the ROCK 3C. |
-| `MotorTestGUI/radxa/` | Programs that run on the ROCK 3C, standard library only: `can_bridge.py` (CAN relay for the GUI's Radxa mode; it sets every drive it has seen idle when the laptop is silent for 0.5 s) and `latency_test.py` (latency and joint response tests) |
+| `MotorTestGUI/` | PySide6 + MuJoCo GUI. Left: the real robot from CAN encoder readings. Center: MuJoCo with the same target trajectory. Right: joint jog with guards, plots, direction and zero setting, and a walking test (rule-based stepping gait in a harness). One or two CAN buses, on the laptop or through the ROCK 3C. Through the ROCK 3C it also shows the IMU attitude (IMU 자세 tab). |
+| `MotorTestGUI/radxa/` | Programs that run on the ROCK 3C: `can_bridge.py` (CAN relay for the GUI's Radxa mode; it sets every drive it has seen idle when the laptop is silent for 0.5 s, and starts the IMU reader as a separate process), `imu_reader.py` (body attitude and angular velocity from the BMI088, an IM10A or a fake sensor, one JSON line per sample), `bmi088.py` (copy of the SOBANG_Locomotion BMI088 driver and Mahony filter, with one fix, see below) and `latency_test.py` (latency and joint response tests). The BMI088 path needs numpy and smbus2; everything else uses the standard library only. |
 | `MotorTestGUI/latency/` | `latency.py` copies the test to the ROCK 3C over SSH, runs it and analyses the logs. `fit_inertia.py` fits joint inertia and armature from the step logs. |
 | `results/` | Measured results: [real_actuator_20261120.md](results/real_actuator_20261120.md) and the same values as JSON |
 
@@ -137,6 +138,8 @@ On first start, MotorTestGUI offers to download the course Robot Model v1 (MJCF 
 ## Relation to the rest of the repository
 
 - `legs/bringup.py calibrate` writes `legs/calibration.json` for the walking policy. MotorTestGUI keeps its own zero in `MotorTestGUI/config/robot_config.json`, which is per laptop and stays out of git. Neither updates the other.
+- `robot/config.toml` (`[imu]`), `legs/imu.py` and `docs/hardware/` plan a Hiwonder IM10A on UART4 (pins 16, 18). The robot has the course BMI088 (Grove 6-Axis) on I2C3 instead (pins 1 3.3 V, 3 SDA, 5 SCL, 6 GND; `/dev/i2c-3`, accelerometer 0x19, gyroscope 0x69). On the ROCK 3C the overlay `rk3568-i2c3-m0` is enabled and smbus2 is installed. MotorTestGUI reads the BMI088; `robot/` and `legs/` are unchanged.
+- `MotorTestGUI/radxa/bmi088.py` differs from the SOBANG_Locomotion copy (commit db6d83a) in one place: the chip resets during the soft-reset write and does not acknowledge it, so Linux returns errno 6 and the original stops at start. The copy ignores that one error. The BMI088 board is turned 90° about z on the robot: use `Bmi088Imu(axes=("+y", "-x", "+z"))`.
 - The GUI simulation still uses the course MJCF gains (6512: Kp 90.0, Kd 5.73; 5010: Kp 21.95, Kd 0.489). The drives run the gains in the setup record. The team decision of 2026-11-06 is to keep the drive gains and match the simulation to them.
 
 ## Not in this folder

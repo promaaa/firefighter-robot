@@ -6,6 +6,7 @@ from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
                                QPlainTextEdit, QPushButton, QSplitter, QTabWidget, QVBoxLayout, QWidget)
 
+from .imu import SENSOR_SHORT
 from .render import OffscreenRenderer, RobotView, VIEW_PRESETS, apply_preset, copy_camera, new_camera
 from .theme import C, RGBA
 from .walk import STAGE_KO
@@ -35,6 +36,9 @@ HELP_TEXT = """<h3>MotorTestGUI</h3>
 12개 관절 연결·영점과 방향 '실물로 확인함'이 필요합니다. 걸음 속도(걸음/분)로 다리 움직임 빠르기를 정합니다. 시작 → 토크 켜기 → 준비 자세 → 걷기 → (정한 시간 또는 '천천히 멈추기') → 처음 자세 → 힘 풀기.
 Esc는 언제든 즉시 멈추고 모두 힘을 풉니다. 매 실행은 MotorTestGUI/logs/walk_날짜_시각/에 자동 기록됩니다.
 실물이 연결되지 않았으면 시뮬에서만 움직입니다.</p>
+<p><b>IMU 자세</b> (오른쪽 'IMU 자세' 탭): 로봇의 BMI088은 Radxa에 꽂혀 있습니다. <b>Radxa 경유</b>로 연결하면 IMU가
+자동으로 시작하고(처음 2초는 로봇을 가만히), 3D 위의 <b>자세 반영 (IMU)</b>도 켜져 왼쪽 실물 그림이 몸통 기울기(roll·pitch)만큼
+기울어집니다. yaw는 반영하지 않습니다. 가상 로봇에서는 가짜 IMU 값이 나옵니다.</p>
 <p><b>안전</b>: 한 번 명령은 '한 번 최대'(기본 30°)까지, 영점이 있으면 시뮬 관절 범위 안으로 자릅니다.
 <b>Esc</b> 또는 빨간 버튼 = 모든 노드 IDLE. 실제 비상 정지는 전원 차단 스위치로 하세요.</p>
 <p><b>각도 모호함</b>: 코스 펌웨어는 전원을 켤 때 모터 1회전(관절 24°) 안의 위치만 압니다. 노드가 처음 보일 때
@@ -56,6 +60,7 @@ class MainWindow(QMainWindow):
         self.cam_sim = self.cam
         self._frame_n = 0
         self._log_seen = 0
+        self._was_radxa = False          # Radxa 경유로 막 연결되면 '자세 반영'을 켬
         self._build()
         self._wire()
         self.panel.select(app.cfg.joints[0].name)
@@ -98,8 +103,13 @@ class MainWindow(QMainWindow):
         self.ghost_target.setChecked(True)
         self.ghost_real = QCheckBox("오른쪽에 실물 자세 겹치기")
         self.ghost_real.setChecked(True)
+        self.attitude_chk = QCheckBox("자세 반영 (IMU)")
+        self.attitude_chk.setToolTip("켜면 왼쪽 실물 그림을 IMU로 잰 몸통 기울기(roll·pitch)만큼 통째로 기울입니다.\n"
+                                     "Radxa 경유로 연결하면 자동으로 켜집니다.\n"
+                                     "yaw(좌우 돌기)는 반영하지 않습니다 (지자기 없이는 시간이 지나며 틀어짐).\n"
+                                     "IMU 값은 오른쪽 'IMU 자세' 탭. 시뮬(오른쪽 그림)은 몸통 고정 그대로입니다.")
         bar.addSpacing(10)
-        for w in (self.sync_cam, self.ghost_target, self.ghost_real):
+        for w in (self.sync_cam, self.ghost_target, self.ghost_real, self.attitude_chk):
             bar.addWidget(w)
         bar.addStretch(1)
         bar.addWidget(QLabel("시뮬 대기 관절"))
@@ -181,6 +191,7 @@ class MainWindow(QMainWindow):
         self.sync_cam.toggled.connect(self._sync_toggled)
         self.idle_mode.currentIndexChanged.connect(lambda _: setattr(app, "sim_idle_mode",
                                                                      self.idle_mode.currentData()))
+        self.attitude_chk.toggled.connect(lambda on: setattr(app, "attitude_on", on))
         self.sync_btn.clicked.connect(app.sync_sim_to_real)
         self.reset_btn.clicked.connect(app.reset_sim)
         for v in (self.view_real, self.view_sim):
@@ -247,6 +258,10 @@ class MainWindow(QMainWindow):
         if n % 3 == 1:
             self.panel.refresh_plots()
         if n % 6 == 0:
+            radxa_now = app.link.connected and app.link.radxa is not None
+            if radxa_now and not self._was_radxa:
+                self.attitude_chk.setChecked(True)
+            self._was_radxa = radxa_now
             self.topbar.refresh()
             self.panel.refresh()
             while app.link.alerts:
@@ -286,8 +301,8 @@ class MainWindow(QMainWindow):
         v = self.view_real
         if real and v.isVisible() and v.width() > 20:
             w, h = v.render_size()
-            ghost = app.target_data if (self.ghost_target.isChecked() and has_target) else None
-            v.set_frame(self.renderer.render(v.scn, v.cam, app.real_data, w, h, colors, sel, ghost,
+            ghost = app.target_view if (self.ghost_target.isChecked() and has_target) else None
+            v.set_frame(self.renderer.render(v.scn, v.cam, app.real_view, w, h, colors, sel, ghost,
                                              RGBA["ghost_target"]))
             total = len(app.cfg.joints)
             lines = []
@@ -302,6 +317,8 @@ class MainWindow(QMainWindow):
                     lines.append((C["uncal"], "보라 = 영점 없음 (각도가 시뮬 기준이 아님)"))
             if ghost is not None:
                 lines.append((C["target"], "주황 반투명 = 목표 자세 (실측과 다른 링크만)"))
+            if self.attitude_chk.isChecked():
+                lines.append(self._attitude_line())
             wk = app.walk
             if wk.active:
                 lines.append((C["real"], f"보행 테스트: {STAGE_KO.get(wk.stage(t), '')} · {wk.walked_s(t):.1f} s"
@@ -325,6 +342,23 @@ class MainWindow(QMainWindow):
             qs = app.sim.q(self.panel.name)
             v.badge = f"{app.cfg.joint(self.panel.name).short} {'—' if qs is None else f'{math.degrees(qs):+.1f}°'}"
 
+    def _attitude_line(self):
+        app = self.app
+        s = app.link.imu.snapshot()
+        name = SENSOR_SHORT.get(s["sensor"], s["sensor"] or "IMU")
+        if app.view_tilt is not None:
+            r, p = (math.degrees(x) for x in app.view_tilt)
+            return C["ink2"], f"자세 반영: roll {r:+.1f}° · pitch {p:+.1f}° ({name} {s['hz']:.0f} Hz, yaw 빼고)"
+        if s["state"] == "calibrating":
+            return C["warning"], f"자세 반영: {name} 보정 중 (로봇을 가만히)"
+        if s["state"] == "error":
+            return C["critical"], f"자세 반영: IMU 오류 — {s['text'][:70]}"
+        if s["state"] == "off":
+            why = ("Radxa 경유로 연결하면 켜짐" if app.link.radxa is None
+                   else "'IMU 자세' 탭에서 '적용 · 다시 시작'")
+            return C["muted"], f"자세 반영: IMU 꺼짐 ({why})"
+        return C["muted"], "자세 반영: IMU 값 없음 (0.5 s 넘게 안 옴)"
+
     def _drain_logs(self):
         logs = list(self.app.logs) + list(self.app.link.logs)
         logs.sort(key=lambda r: r[0])
@@ -343,7 +377,7 @@ class MainWindow(QMainWindow):
                 ev.ignore()
                 return
         if app.dirty:
-            r = QMessageBox.question(self, "종료", "영점·방향 설정이 바뀌었습니다. 저장할까요?",
+            r = QMessageBox.question(self, "종료", "영점·방향 또는 IMU 설정이 바뀌었습니다. 저장할까요?",
                                      QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
             if r == QMessageBox.Cancel:
                 ev.ignore()
