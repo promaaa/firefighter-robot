@@ -32,6 +32,8 @@ parser.add_argument("--name", type=str, required=True, help="Name of the result 
 parser.add_argument("--out_dir", type=str, default="logs/sim2sim_tracking", help="Output directory.")
 parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2], help="Seeds of the observation noise.")
 parser.add_argument("--no_obs_noise", action="store_true", help="Feed noise-free observations to the policy.")
+parser.add_argument("--no_real_robot", action="store_true",
+                    help="Ignore the config's sim_real_robot block (ideal actuators and sensors).")
 parser.add_argument("--kp_scale", type=float, default=1.0,
                     help="Factor on the simulated PD stiffness of every joint (actuator gap; the policy is unchanged; "
                          "put the factors in --name).")
@@ -85,6 +87,8 @@ def run_trial(robot, controller, cmd):
 
 def main():
     cfg = OmegaConf.load(policy_select.config(args.policy))
+    if args.no_real_robot:
+        cfg.sim_real_robot = None
     obs_noise = not args.no_obs_noise
     robot = MujocoSimulator(cfg, obs_noise=obs_noise)
     robot.joint_kp *= args.kp_scale
