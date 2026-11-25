@@ -8,3 +8,6 @@ from .events import *  # noqa: F401, F403
 from .terminations import *  # noqa: F401, F403
 from .push import *  # noqa: F401, F403
 from .dynamics import *  # noqa: F401, F403
+from .actuators import *  # noqa: F401, F403
+from .real_robot import *  # noqa: F401, F403
+from .torque_clamp import *  # noqa: F401, F403

@@ -10,6 +10,23 @@ robot model: source/robot_models  (shared by training, sim2sim and the robot)
 
 Results are **tested in simulation** unless a table says otherwise (status words: [CONTRIBUTING](../../CONTRIBUTING.md)).
 
+## Walked on the real robot
+
+**The policies `real_clamp12`, `real_clamp9` and `real_clamp6` walked on the real robot on 25 November 2026** (in a harness; `real_clamp12` best; measured on board). They come from the real walking tasks `Velocity-ASMR-Biped-RealClamp{12,9,6}-v0`, which rebuild the simulation from measurements on the real robot:
+- the course driver PD, measured friction and armature, and the weighed link masses;
+- encoder zero offsets, backlash, sensor and command delays, and BMI088 errors;
+- a forward-shifted torso CoM range;
+- the 50 Hz Radxa loop with its torque clamp (the drives keep their 18 A limit).
+
+The page [results/real_walk.md](results/real_walk.md) describes the environment, how the policies were trained, the simulation checks, and what the robot loop must do. Read it before you change these tasks or run the policies on the robot.
+
+```bash
+uv run --project sim/locomotion sim/locomotion/scripts/sim2sim/eval_tracking_mujoco.py --policy real_clamp12 --name real_clamp12   # MuJoCo with the real-robot effects
+uv run --project sim/locomotion sim/locomotion/scripts/sim2sim/eval_real_conditions_mujoco.py --policy real_clamp12 --variant com_x=4  # real-test conditions
+```
+
+`legs/run_policy.py` is fixed for `baseline` (25 Hz, course pose) and has no torque clamp, so it cannot run these policies as it is.
+
 ## Folder
 
 | Path | Content |
@@ -82,6 +99,9 @@ mark the place of a name. Add `--headless` to `play.py` when the PC has no usabl
 | `…-{Push, PushSignal, PushSignalHold, PushSignalHold2, Brace, Brace2}-v0` | Backward push (water-jet reaction); the signal variants add a push flag (46 observations) |
 | `…-S2R-{DR000, DR050, DR100, DR200, Friction100, Inertia100}-v0` | Width of the dynamics randomisation |
 | `…-Actuator-{Gain125, Gain150, Gain200}-v0` | PD gain randomisation |
+| `…-FW6-v0`, `…-FW6-{MeasT6, MeasT68, MeasT68DR100}-v0` | Course driver firmware gains with a 6 N m limit; the Meas tasks add the measured friction model (MeasT68DR100 is the base of the real tasks) |
+| `…-Real-v0` | Real walking test model (`source/robot_models/robots/asmr2026_real.py`), 50 Hz, 6 N m torque limit. Policy `real_walk` |
+| `…-RealClamp{6, 9, 12}-v0` | `Real-v0` with the Radxa target clamp at 6, 9 or 12 N m and a forward torso CoM range. **Walked on the real robot** (policies `real_clamp6`, `real_clamp9`, `real_clamp12`) |
 
 The old names `Velocity-Berkeley-Humanoid-Lite-Biped-*` are no longer registered. Their code (`config/biped*`) stays as the base configuration that the `config/asmr_biped*` tasks extend. The BHL original robot task was removed ([UPSTREAM.md](UPSTREAM.md)). The trained networks of every task are described in [policies/README.md](../../policies/README.md).
 
@@ -107,6 +127,7 @@ The old names `Velocity-Berkeley-Humanoid-Lite-Biped-*` are no longer registered
 | `eval_tracking_mujoco.py` | The same commands with the deployment stack (`RlController`) | MuJoCo |
 | `eval_sustained_push_mujoco.py` | Sustained backward push on the standing robot | MuJoCo |
 | `eval_timing_mujoco.py` | Tracking under delay, period and jitter; cross-check of `s2r/eval_timing_gap.py` | MuJoCo |
+| `eval_real_conditions_mujoco.py` | Real walking policies under real-test conditions (IMU tilt, forward lean, knee zero, torso CoM, friction, harness): falls, pitch, torque, tracking error | MuJoCo |
 | `play_mujoco.py` | Plays a config in the MuJoCo viewer; velocity from a gamepad | MuJoCo |
 | `tracking_common.py` | The command protocol shared by the two tracking evaluations | (helper) |
 

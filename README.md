@@ -48,12 +48,12 @@ At the demo, the robot must find a candle, walk to it, aim and put it out.
 |---|---|---|
 | Fire detector | measured on board | YOLO11n in INT8 on the RK3566 NPU: 21 fps. Flame found in 267 of 267 frames of a candle video on a screen (11 Nov). mAP50 0.809 on 13 919 test images (laptop). |
 | Leg drives over CAN | measured on laptop | All 12 drives answer. Direction and zero are set for 12 joints, and 11 joints move on command (13 Nov). |
-| Walking | tested in simulation | Policy trained in Isaac Lab, checked in MuJoCo. Not tried on the real robot yet. |
+| Walking | measured on board | `real_clamp12` (also `real_clamp9`, `real_clamp6`) walked on the real robot in a harness (25 Nov), with the 50 Hz Radxa loop and a torque clamp. Training environment and results: [sim/locomotion/results/real_walk.md](sim/locomotion/results/real_walk.md). |
 | Aiming and full missions | tested in simulation | All fires out in 8 of 50 random missions, 37 of 102 fires out. |
 | Water jet | tested in simulation | The model gives 9.6 m/s at the 1.0 mm nozzle, a reach of 2.7 to 5.1 m and 4.8 min of spray from a 2 L bag. |
 | Water trolley | planned | 2 L bag, pump and battery on a pushed pole, a hose to the fixed nozzle. |
 | Torso CAD for the trolley design | planned | The full robot CAD is in [`cad/`](cad/). The camera module is in pull request 7 and has no position in the assembly yet. |
-| Real fire test, walking on the real robot | planned | |
+| Real fire test | planned | |
 
 ## How it works
 

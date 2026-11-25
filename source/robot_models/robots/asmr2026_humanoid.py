@@ -8,6 +8,9 @@ ankle roll axes are flipped, so the standing pose has mirrored signs.
 Actuator parameters are the course's bench fit of one actuator of each type (mjlab/asmr2026_humanoid_constants.py):
 PD gains from the armature at a 10 Hz natural frequency (damping ratio 2.0 for the 6512 joints, 0.7 for the 5010
 ankles), the torque limit of the motor driver's 18 A current limit, and Coulomb + viscous joint friction.
+
+The FW6 configs at the end use the course motor driver firmware gains (the real robot) and the friction measured
+on our actuators; the real walking test model (asmr2026_real.py) builds on them.
 """
 
 import math
@@ -51,18 +54,42 @@ class FrictionImplicitActuator(ImplicitActuator):
     """Implicit PD actuator with Coulomb and viscous joint friction applied as a feed-forward torque.
 
     PhysX joint friction is a unitless coefficient on the force transmitted through the joint, not a friction torque,
-    so the friction torque -f_c tanh(qd / v_s) - b qd is added to the joint each physics step instead. It acts on the
+    so the friction torque -f tanh(qd / v_s) - b qd is added to the joint each physics step instead. It acts on the
     joint besides the motor: the PD torque alone is clipped to the effort limit and reported as the applied torque.
-    The smoothing velocity v_s keeps this explicit term stable: its slope f_c / v_s times the physics step stays
+    The smoothing velocity v_s keeps this explicit term stable: its slope f / v_s times the physics step stays
     below the joint inertia, which is at least the armature.
+
+    The friction magnitude f is the Coulomb friction f_c, optionally raised at low speed (Stribeck) and by the
+    torque through the gear (load-dependent friction of the course's 3D-printed gearboxes):
+        f = f_c (1 + (r - 1) exp(-(qd / v_st)^2)) + s (a |tau| + c tau^2),
+    with tau the clipped PD torque. With adaptive smoothing, v_s grows with f / f_c (never shrinks), which keeps the
+    slope of the explicit term at most that of the nominal Coulomb friction.
     """
 
     cfg: "FrictionImplicitActuatorCfg"
 
+    def __init__(self, cfg: "FrictionImplicitActuatorCfg", *args, **kwargs):
+        super().__init__(cfg, *args, **kwargs)
+        # per environment and joint, so that randomization events can change them
+        shape = (self._num_envs, self.num_joints)
+        self.coulomb_friction = torch.full(shape, cfg.coulomb_friction, device=self._device)
+        self.viscous_friction = torch.full(shape, cfg.viscous_friction, device=self._device)
+        self.friction_smoothing_velocity = torch.full(shape, cfg.friction_smoothing_velocity, device=self._device)
+        self.stribeck_ratio = torch.full(shape, cfg.stribeck_ratio, device=self._device)
+        self.load_friction_scale = torch.ones(shape, device=self._device)
+
     def compute(self, control_action: ArticulationActions, joint_pos: torch.Tensor, joint_vel: torch.Tensor):
         control_action = super().compute(control_action, joint_pos, joint_vel)
-        friction = (self.cfg.coulomb_friction * torch.tanh(joint_vel / self.cfg.friction_smoothing_velocity)
-                    + self.cfg.viscous_friction * joint_vel)
+        magnitude = self.coulomb_friction * (
+            1.0 + (self.stribeck_ratio - 1.0) * torch.exp(-((joint_vel / self.cfg.stribeck_velocity) ** 2)))
+        if self.cfg.load_friction_linear != 0.0 or self.cfg.load_friction_quadratic != 0.0:
+            torque = self.applied_effort.abs()
+            magnitude = magnitude + self.load_friction_scale * (
+                self.cfg.load_friction_linear * torque + self.cfg.load_friction_quadratic * torque**2)
+        smoothing = self.friction_smoothing_velocity
+        if self.cfg.adaptive_friction_smoothing:
+            smoothing = smoothing * torch.clamp(magnitude / self.cfg.coulomb_friction, min=1.0)
+        friction = magnitude * torch.tanh(joint_vel / smoothing) + self.viscous_friction * joint_vel
         # out of place: the efforts may be a view of the articulation's effort targets
         control_action.joint_efforts = control_action.joint_efforts - friction
         return control_action
@@ -80,6 +107,16 @@ class FrictionImplicitActuatorCfg(ImplicitActuatorCfg):
     """Viscous friction coefficient (N m s / rad)."""
     friction_smoothing_velocity: float = 0.1
     """Joint speed (rad/s) over which the Coulomb friction rises to its full value (tanh)."""
+    stribeck_ratio: float = 1.0
+    """Friction at standstill relative to the Coulomb friction; the increase fades as exp(-(qd / v_st)^2)."""
+    stribeck_velocity: float = 0.1
+    """Joint speed v_st (rad/s) of the low-speed friction increase."""
+    load_friction_linear: float = 0.0
+    """Friction increase per N m of torque through the gear (the clipped PD torque)."""
+    load_friction_quadratic: float = 0.0
+    """Friction increase per (N m)^2 of torque through the gear."""
+    adaptive_friction_smoothing: bool = False
+    """Scale the smoothing velocity with the friction magnitude relative to the Coulomb friction (see the class)."""
 
 
 # 6512 actuator (hip roll, hip yaw, hip pitch, knee): kt 0.067 N m/A
@@ -143,3 +180,53 @@ ASMR2026_HUMANOID_CFG = ArticulationCfg(
     actuators={"legs": ACTUATOR_6512_CFG, "ankles": ACTUATOR_5010_CFG},
 )
 """Configuration for the ASMR 2026 course humanoid."""
+
+##
+# Course motor driver firmware settings
+##
+
+# Gains of the course XDrive MINI configuration (xdrive_config.txt in omletkang/xdrive-mini-fw-instant-start).
+# ODrive position mode without the velocity integrator is a joint PD with Kp = pos_gain * vel_gain * N^2 / 2 pi and
+# Kd = vel_gain * N^2 / 2 pi; the configuration sets torque_constant to the bench kt, so the driver's N m are real.
+FW_POS_GAIN_6512, FW_VEL_GAIN_6512 = 12.6, 0.223  # (turn/s) / turn, N m / (turn/s)
+FW_POS_GAIN_5010, FW_VEL_GAIN_5010 = 20.0, 0.1
+# joint-side torque limit of every joint (N m); on the driver: motor.config.torque_lim = FW_TORQUE_LIMIT / GEAR_RATIO
+FW_TORQUE_LIMIT = 6.0
+
+
+def odrive_pd_gains(pos_gain: float, vel_gain: float) -> tuple[float, float]:
+    kd = vel_gain * GEAR_RATIO**2 / (2.0 * math.pi)
+    return pos_gain * kd, kd
+
+
+KP_6512_FW, KD_6512_FW = odrive_pd_gains(FW_POS_GAIN_6512, FW_VEL_GAIN_6512)  # 100.6, 7.99
+KP_5010_FW, KD_5010_FW = odrive_pd_gains(FW_POS_GAIN_5010, FW_VEL_GAIN_5010)  # 71.6, 3.58
+
+ASMR2026_HUMANOID_FW6_CFG = ASMR2026_HUMANOID_CFG.replace(
+    actuators={
+        "legs": ACTUATOR_6512_CFG.replace(stiffness=KP_6512_FW, damping=KD_6512_FW, effort_limit_sim=FW_TORQUE_LIMIT),
+        "ankles": ACTUATOR_5010_CFG.replace(stiffness=KP_5010_FW, damping=KD_5010_FW, effort_limit_sim=FW_TORQUE_LIMIT),
+    },
+)
+"""The course humanoid with the course driver firmware gains and a 6 N m torque limit on every joint."""
+
+# Friction measured on two hip yaw 6512 actuators after about 80 min of break-in (team bench test, 2026-11-05/06;
+# Notion "액추에이터 측정 결과"): Coulomb 0.35-0.36 N m from 0.37 to 5.8 rad/s, no viscous friction, about 20 % more
+# at 0.10 rad/s (a Stribeck ratio of 1.54 at v_st 0.1 rad/s gives +20 % at 0.10 and +6 % at 0.15 rad/s), and an
+# increase with load of 0.0125 |tau| + 0.016 tau^2 (+0.13 N m at 2.44 N m, +0.69 at 6.18 N m). The 5010 is not
+# measured yet: the course fit's Coulomb friction with the same structure.
+MEASURED_FRICTION = dict(
+    viscous_friction=0.0,
+    stribeck_ratio=1.54,
+    stribeck_velocity=0.1,
+    load_friction_linear=0.0125,
+    load_friction_quadratic=0.016,
+    adaptive_friction_smoothing=True,
+)
+ASMR2026_HUMANOID_FW6M_CFG = ASMR2026_HUMANOID_FW6_CFG.replace(
+    actuators={
+        "legs": ASMR2026_HUMANOID_FW6_CFG.actuators["legs"].replace(coulomb_friction=0.36, **MEASURED_FRICTION),
+        "ankles": ASMR2026_HUMANOID_FW6_CFG.actuators["ankles"].replace(coulomb_friction=0.317, **MEASURED_FRICTION),
+    },
+)
+"""FW6 with the measured friction model (Coulomb, low-speed increase and load-dependent friction, no viscous)."""

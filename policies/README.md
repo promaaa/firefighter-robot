@@ -17,6 +17,10 @@ Each folder holds `model_<iteration>.pt` (RSL-RL checkpoint), `policy.onnx` (dep
 | `brace_m4` | `…-Brace-v0` | Bracing-only policy | 46 |
 | `brace_m4b` | `…-Brace2-v0` | M4 + strict hold reward, signal leads, actions limited to +-20 | 46 |
 | `act_gain125` / `150` / `200` | `…-Actuator-Gain{125,150,200}-v0` | Per-joint Kp, Kd randomisation x0.8-1.25 / x0.67-1.5 / x0.5-2 | 45 |
+| **`real_clamp12`** | `…-RealClamp12-v0` | **Walked on the real robot (25 Nov 2026), the best one.** Real-robot model, 50 Hz, Radxa torque clamp 12 N m | 45 |
+| **`real_clamp9`** | `…-RealClamp9-v0` | **Walked on the real robot (25 Nov 2026).** Clamp 9 N m | 45 |
+| **`real_clamp6`** | `…-RealClamp6-v0` | **Walked on the real robot (25 Nov 2026).** Clamp 6 N m; weaker sideways and turning | 45 |
+| `real_walk` | `…-Real-v0` | Real-robot model with a 6 N m torque limit; base checkpoint of the clamp policies. On 24 Nov it leaned forward on the robot | 45 |
 
 alpha 1 means torso mass +-1.5 kg, leg mass +-20 %, centre of mass +-3 cm, foot friction 0.8 +- 0.4.
 
@@ -24,3 +28,4 @@ alpha 1 means torso mass +-1.5 kg, leg mass +-20 %, centre of mass +-3 cm, foot 
 - `f1_v1` and `f3_v1` (45 observations, `trained_on: bhl`) are our JAX policies for the BHL-model F2 and F3 (card in `train_ranges.json`, training code in [archive/rl_f1](../archive/rl_f1/README.md)). `gap_study.py` uses `f1_v1` on the BHL model (FIXME(policy)); no code uses `f3_v1`. They have no `policy.yaml` and have not run on the robot.
 - Only 45-observation policies fit the robot software today. The push-signal policies (46) take the push flag (0/1) as the last observation, which `legs/run_policy.py`, `RlController` and `play_mujoco.py` do not provide. Test them in MuJoCo with `sim/locomotion/scripts/sim2sim/eval_sustained_push_mujoco.py`.
 - M4 and M4b are meant to be switched in from `baseline` when a push signal arrives. That switch is not implemented in the deployment code.
+- **The real walking policies** (`real_clamp*`, `real_walk`) need a 50 Hz loop with their own standing pose (knee 0.4 rad), vel_ff = 0, and the Radxa target clamp at `torque_clamp_nm` of their `policy.yaml`. The real tests used the Radxa loop of the actuator test GUI. `legs/run_policy.py` (25 Hz, course pose, no clamp) cannot run them as it is. Details: [sim/locomotion/results/real_walk.md](../sim/locomotion/results/real_walk.md).

@@ -1,0 +1,8 @@
+{
+ "trained_on": "asmr2026",
+ "observation_size": 45,
+ "task": "Velocity-ASMR-Biped-RealClamp12-v0",
+ "deploy": "50 Hz loop with vel_ff = 0 and, when torque_clamp_nm is set, the Radxa target clamp at that limit (SOBANG_MotorTest radxa/walk_policy.py). Not for legs/run_policy.py (25 Hz, course pose).",
+ "real_robot": "2026-11-25: walked on the real robot (harness, team report); the best of the three.",
+ "torque_clamp_nm": 12.0
+}

@@ -1,0 +1,184 @@
+policy_checkpoint_path: policies/real_walk/policy.onnx
+ip_robot_addr: 127.0.0.1
+ip_policy_obs_port: 10000
+ip_host_addr: 127.0.0.1
+ip_policy_acs_port: 10001
+control_dt: 0.004
+policy_dt: 0.02
+physics_dt: 0.0005
+cutoff_freq: 1000
+num_joints: 12
+joints:
+- leg_left_hip_roll_joint
+- leg_left_hip_yaw_joint
+- leg_left_hip_pitch_joint
+- leg_left_knee_pitch_joint
+- leg_left_ankle_pitch_joint
+- leg_left_ankle_roll_joint
+- leg_right_hip_roll_joint
+- leg_right_hip_yaw_joint
+- leg_right_hip_pitch_joint
+- leg_right_knee_pitch_joint
+- leg_right_ankle_pitch_joint
+- leg_right_ankle_roll_joint
+joint_kp:
+- 100.6185507974117
+- 100.6185507974117
+- 100.6185507974117
+- 100.6185507974117
+- 71.6197243913529
+- 71.6197243913529
+- 100.6185507974117
+- 100.6185507974117
+- 100.6185507974117
+- 100.6185507974117
+- 71.6197243913529
+- 71.6197243913529
+joint_kd:
+- 7.985599269635849
+- 7.985599269635849
+- 7.985599269635849
+- 7.985599269635849
+- 3.580986219567645
+- 3.580986219567645
+- 7.985599269635849
+- 7.985599269635849
+- 7.985599269635849
+- 7.985599269635849
+- 3.580986219567645
+- 3.580986219567645
+effort_limits:
+- 6.0
+- 6.0
+- 6.0
+- 6.0
+- 6.0
+- 6.0
+- 6.0
+- 6.0
+- 6.0
+- 6.0
+- 6.0
+- 6.0
+default_base_position:
+- 0.0
+- 0.0
+- -0.01056
+default_joint_positions:
+- 0.0
+- 0.0
+- 0.2457719
+- -0.4
+- 0.1542281
+- 0.0
+- 0.0
+- 0.0
+- -0.2457719
+- 0.4
+- -0.1542281
+- 0.0
+num_observations: 45
+history_length: 0
+command_velocity:
+- 0.0
+- 0.0
+- 0.0
+num_actions: 12
+action_scale: 0.25
+action_indices:
+- 0
+- 1
+- 2
+- 3
+- 4
+- 5
+- 6
+- 7
+- 8
+- 9
+- 10
+- 11
+action_limit_lower: -20.0
+action_limit_upper: 20.0
+obs_noise_joint_pos: 0.01
+sim_real_robot:
+  zero_offset: 0.0349066
+  backlash:
+  - 0.0
+  - 0.0174533
+  action_delay_ms:
+  - 2.0
+  - 6.0
+  joint_obs_delay_ms:
+  - 0.0
+  - 6.0
+  imu_obs_delay_ms:
+  - 0.0
+  - 6.0
+  imu_tilt: 0.0349066
+  gyro_bias: 0.02
+  armature_6512:
+  - 0.018
+  - 0.034
+  armature_5010:
+  - 0.0056
+  - 0.014
+mjcf_path: source/robot_models/data/robots/asmr2026/asmr2026_humanoid_v1/mjcf/scene.xml
+sim_payload: null
+sim_body_masses:
+  base: 5.36485
+  leg_left_hip_roll: 0.77574
+  leg_right_hip_roll: 0.77536
+  leg_left_hip_yaw: 0.7669
+  leg_right_hip_yaw: 0.76847
+  leg_left_hip_pitch: 0.90315
+  leg_right_hip_pitch: 0.89998
+  leg_left_knee_pitch: 0.62051
+  leg_right_knee_pitch: 0.62056
+  leg_left_ankle_pitch: 0.16019
+  leg_right_ankle_pitch: 0.16015
+  leg_left_ankle_roll: 0.57774
+  leg_right_ankle_roll: 0.57667
+joint_friction:
+  coulomb:
+  - 0.36
+  - 0.36
+  - 0.36
+  - 0.36
+  - 0.317
+  - 0.317
+  - 0.36
+  - 0.36
+  - 0.36
+  - 0.36
+  - 0.317
+  - 0.317
+  viscous:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  stribeck_ratio:
+  - 1.54
+  - 1.54
+  - 1.54
+  - 1.54
+  - 1.54
+  - 1.54
+  - 1.54
+  - 1.54
+  - 1.54
+  - 1.54
+  - 1.54
+  - 1.54
+  stribeck_velocity: 0.1
+  load_linear: 0.0125
+  load_quadratic: 0.016
